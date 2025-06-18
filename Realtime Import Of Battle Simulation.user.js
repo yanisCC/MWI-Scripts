@@ -23,8 +23,6 @@
     let playerId;
     let clientData = {};
 
-    hookWS();
-
     // 监听WebSocket
     function hookWS() {
         const dataProperty = Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data");
@@ -45,7 +43,12 @@
             const message = oriGet.call(this);
             Object.defineProperty(this, "data", { value: message }); // Anti-loop
 
-            return handleMessage(message);
+            try {
+                handleMessage(message);
+            } catch (e) {
+                console.log(`处理聊天消息时出错: ${e}`)
+            }
+            return message;
         }
     }
 
@@ -100,16 +103,6 @@
                 // ping-pong
                 break;
             }
-            case 'init_character_data': {
-                GM_setValue("init_character_data", message);
-                // 角色Id
-                playerId = obj.character.id;
-                // 战斗模拟数据
-                obj.battleObj = buildBattleObjFromInitData(obj);
-                // 初始化信息
-                saveCharacterData(obj);
-                break;
-            }
             case 'init_client_data': {
                 // 客户端数据
                 GM_setValue("init_client_data", message);
@@ -118,6 +111,30 @@
                 clientData.itemDetailMap = obj.itemDetailMap;
                 clientData.actionCategoryDetailMap = obj.actionCategoryDetailMap;
                 clientData.abilityDetailMap = obj.abilityDetailMap;
+                break;
+            }
+            case 'init_character_data': {
+                // 初始化信息
+                GM_setValue("init_character_data", message);
+                playerId = obj.character.id;
+                obj.battleObj = buildBattleObjFromInitData(obj);
+                saveCharacterData(obj);
+                break;
+            }
+            case 'profile_shared': {
+                // 角色详情
+                let player = getPlayerData(obj.profile.characterSkills[0].characterID)
+                let battleObj = buildBattleObjFromProfileShared(player, obj);
+                // if (!player) {
+                    player = {
+                        character: {
+                            id: battleObj.character.id,
+                            name: battleObj.character.name
+                        }
+                    }
+                // }
+                player.battleObj = battleObj;
+                saveCharacterData(player);
                 break;
             }
             case 'active_player_count_updated': {
@@ -148,10 +165,6 @@
                         }
                     }
                 }
-                break;
-            }
-            case 'profile_shared': {
-                // 角色详情
                 break;
             }
             case 'chat_message_received': {
@@ -356,7 +369,7 @@
         resultDiv.append(div);
     }
 
-    // 构建战斗模拟信息
+    // 构建战斗模拟信息(InitData)
     function buildBattleObjFromInitData(obj) {
         let battleObj = {};
         // Base
@@ -364,6 +377,7 @@
         battleObj.character.id = obj.character.id;
         battleObj.character.name = obj.character.name;
         battleObj.character.gameMode = obj.character.gameMode;
+        battleObj.timestamp = Date.now();
         // Levels
         battleObj.player = {}
         for (const skill of obj.characterSkills) {
@@ -385,41 +399,47 @@
         }
         // Equipments
         battleObj.player.equipment = [];
-        for (const item of obj.characterItems) {
-            if (!item.itemLocationHrid.includes("/item_locations/inventory")) {
-                battleObj.player.equipment.push({
-                    itemLocationHrid: item.itemLocationHrid,
-                    itemHrid: item.itemHrid,
-                    enhancementLevel: item.enhancementLevel,
-                });
+        if (obj.characterItems) {
+            for (const item of obj.characterItems) {
+                if (!item.itemLocationHrid.includes("/item_locations/inventory")) {
+                    battleObj.player.equipment.push({
+                        itemLocationHrid: item.itemLocationHrid,
+                        itemHrid: item.itemHrid,
+                        enhancementLevel: item.enhancementLevel,
+                    });
+                }
             }
         }
         // Food
         battleObj.food = {}
         battleObj.food["/action_types/combat"] = [];
-        for (const food of obj.actionTypeFoodSlotsMap["/action_types/combat"]) {
-            if (food) {
-                battleObj.food["/action_types/combat"].push({
-                    itemHrid: food.itemHrid,
-                });
-            } else {
-                battleObj.food["/action_types/combat"].push({
-                    itemHrid: "",
-                });
+        if (obj.actionTypeFoodSlotsMap["/action_types/combat"]) {
+            for (const food of obj.actionTypeFoodSlotsMap["/action_types/combat"]) {
+                if (food) {
+                    battleObj.food["/action_types/combat"].push({
+                        itemHrid: food.itemHrid,
+                    });
+                } else {
+                    battleObj.food["/action_types/combat"].push({
+                        itemHrid: "",
+                    });
+                }
             }
         }
         // Drinks
         battleObj.drinks = {}
         battleObj.drinks["/action_types/combat"] = [];
-        for (const drink of obj.actionTypeDrinkSlotsMap["/action_types/combat"]) {
-            if (drink) {
-                battleObj.drinks["/action_types/combat"].push({
-                    itemHrid: drink.itemHrid,
-                });
-            } else {
-                battleObj.drinks["/action_types/combat"].push({
-                    itemHrid: "",
-                });
+        if (obj.actionTypeDrinkSlotsMap["/action_types/combat"]) {
+            for (const drink of obj.actionTypeDrinkSlotsMap["/action_types/combat"]) {
+                if (drink) {
+                    battleObj.drinks["/action_types/combat"].push({
+                        itemHrid: drink.itemHrid,
+                    });
+                } else {
+                    battleObj.drinks["/action_types/combat"].push({
+                        itemHrid: "",
+                    });
+                }
             }
         }
         // Abilities
@@ -445,25 +465,193 @@
                 level: "1",
             },
         ];
-        let normalAbillityIndex = 1;
-        for (const ability of obj.combatUnit.combatAbilities) {
-            if (ability && clientData.abilityDetailMap[ability.abilityHrid].isSpecialAbility) {
-                battleObj.abilities[0] = {
-                    abilityHrid: ability.abilityHrid,
-                    level: ability.level,
-                };
-            } else if (ability) {
-                battleObj.abilities[normalAbillityIndex++] = {
-                    abilityHrid: ability.abilityHrid,
-                    level: ability.level,
-                };
+        if (obj.combatUnit.combatAbilities) {
+            let index = 1;
+            for (const ability of obj.combatUnit.combatAbilities) {
+                if (ability && clientData.abilityDetailMap[ability.abilityHrid].isSpecialAbility) {
+                    battleObj.abilities[0] = {
+                        abilityHrid: ability.abilityHrid,
+                        level: ability.level,
+                    };
+                } else if (ability) {
+                    battleObj.abilities[index++] = {
+                        abilityHrid: ability.abilityHrid,
+                        level: ability.level,
+                    };
+                }
             }
         }
         // TriggerMap
         battleObj.triggerMap = { ...obj.abilityCombatTriggersMap, ...obj.consumableCombatTriggersMap };
         // HouseRooms
         battleObj.houseRooms = {};
-        for (const house of Object.values(obj.characterHouseRoomMap)) {
+        if (obj.characterHouseRoomMap) {
+            for (const house of Object.values(obj.characterHouseRoomMap)) {
+                battleObj.houseRooms[house.houseRoomHrid] = house.level;
+            }
+        }
+        return battleObj;
+    }
+
+    // 构建战斗模拟信息(ProfileShared)
+    function buildBattleObjFromProfileShared(player, obj) {
+        let battleObj = {};
+        // Base
+        battleObj.character = {}
+        battleObj.character.id = player ? player.character.id : obj.profile.characterSkills[0].characterID;
+        battleObj.character.name = obj.profile.sharableCharacter.name;
+        battleObj.character.gameMode = obj.profile.sharableCharacter.gameMode;
+        battleObj.timestamp = Date.now();
+        // Levels
+        battleObj.player = {}
+        for (const skill of obj.profile.characterSkills) {
+            if (skill.skillHrid.includes("stamina")) {
+                battleObj.player.staminaLevel = skill.level;
+            } else if (skill.skillHrid.includes("intelligence")) {
+                battleObj.player.intelligenceLevel = skill.level;
+            } else if (skill.skillHrid.includes("attack")) {
+                battleObj.player.attackLevel = skill.level;
+            } else if (skill.skillHrid.includes("power")) {
+                battleObj.player.powerLevel = skill.level;
+            } else if (skill.skillHrid.includes("defense")) {
+                battleObj.player.defenseLevel = skill.level;
+            } else if (skill.skillHrid.includes("ranged")) {
+                battleObj.player.rangedLevel = skill.level;
+            } else if (skill.skillHrid.includes("magic")) {
+                battleObj.player.magicLevel = skill.level;
+            }
+        }
+        // Equipments
+        battleObj.player.equipment = [];
+        if (obj.profile.wearableItemMap) {
+            for (const key in obj.profile.wearableItemMap) {
+                const item = obj.profile.wearableItemMap[key];
+                battleObj.player.equipment.push({
+                    itemLocationHrid: item.itemLocationHrid,
+                    itemHrid: item.itemHrid,
+                    enhancementLevel: item.enhancementLevel,
+                });
+            }
+        }
+        // Food and Drinks
+        battleObj.food = {}
+        battleObj.food["/action_types/combat"] = [];
+        battleObj.drinks = {}
+        battleObj.drinks["/action_types/combat"] = [];
+        let wearableItemMap = obj.profile.wearableItemMap;
+        const weapon = wearableItemMap && (
+            wearableItemMap["/item_locations/main_hand"]?.itemHrid
+            || wearableItemMap["/item_locations/two_hand"]?.itemHrid
+        );
+        if (player) {
+            battleObj.food = player.battleObj.food;
+            battleObj.drinks = player.battleObj.drinks;
+        } else if (weapon) {
+            if (weapon.includes("shooter") || weapon.includes("bow")) {
+                // 远程
+                battleObj.food["/action_types/combat"] = [
+                    // 2红1蓝
+                    { itemHrid: "/items/spaceberry_donut" },
+                    { itemHrid: "/items/spaceberry_cake" },
+                    { itemHrid: "/items/star_fruit_yogurt" }
+                ]
+                battleObj.drinks["/action_types/combat"] = [
+                    // 经验.超远.暴击
+                    { itemHrid: "/items/wisdom_coffee" },
+                    { itemHrid: "/items/super_ranged_coffee" },
+                    { itemHrid: "/items/critical_coffee" }
+                ]
+            } else if (weapon.includes("boomstick") || weapon.includes("staff")) {
+                // 法师
+                battleObj.food["/action_types/combat"] = [
+                    // 1红2蓝
+                    { itemHrid: "/items/spaceberry_cake" },
+                    { itemHrid: "/items/star_fruit_gummy" },
+                    { itemHrid: "/items/star_fruit_yogurt" }
+                ]
+                battleObj.drinks["/action_types/combat"] = [
+                    // 经验.超魔.吟唱
+                    { itemHrid: "/items/wisdom_coffee" },
+                    { itemHrid: "/items/super_magic_coffee" },
+                    { itemHrid: "/items/channeling_coffee" }
+                ]
+            } else if (weapon.includes("bulwark")) {
+                // 双手盾
+                battleObj.food["/action_types/combat"] = [
+                    // 2红1蓝
+                    { itemHrid: "/items/spaceberry_donut" },
+                    { itemHrid: "/items/spaceberry_cake" },
+                    { itemHrid: "/items/star_fruit_yogurt" }
+                ]
+                battleObj.drinks["/action_types/combat"] = [
+                    // 经验.超防.超耐
+                    { itemHrid: "/items/wisdom_coffee" },
+                    { itemHrid: "/items/super_defense_coffee" },
+                    { itemHrid: "/items/super_stamina_coffee" }
+                ]
+            } else {
+                // 近战
+                battleObj.food["/action_types/combat"] = [
+                    // 2红1蓝
+                    { itemHrid: "/items/spaceberry_donut" },
+                    { itemHrid: "/items/spaceberry_cake" },
+                    { itemHrid: "/items/star_fruit_yogurt" }
+                ]
+                battleObj.drinks["/action_types/combat"] = [
+                    // 经验.超力.迅捷
+                    { itemHrid: "/items/wisdom_coffee" },
+                    { itemHrid: "/items/super_power_coffee" },
+                    { itemHrid: "/items/swiftness_coffee" }
+                ]
+            }
+        }
+
+        // Abilities
+        battleObj.abilities = [
+            {
+                abilityHrid: "",
+                level: "1",
+            },
+            {
+                abilityHrid: "",
+                level: "1",
+            },
+            {
+                abilityHrid: "",
+                level: "1",
+            },
+            {
+                abilityHrid: "",
+                level: "1",
+            },
+            {
+                abilityHrid: "",
+                level: "1",
+            },
+        ];
+        if (obj.profile.equippedAbilities) {
+            let index = 1;
+            for (const ability of obj.profile.equippedAbilities) {
+                if (ability && clientData.abilityDetailMap[ability.abilityHrid].isSpecialAbility) {
+                    battleObj.abilities[0] = {
+                        abilityHrid: ability.abilityHrid,
+                        level: ability.level,
+                    };
+                } else if (ability) {
+                    battleObj.abilities[index++] = {
+                        abilityHrid: ability.abilityHrid,
+                        level: ability.level,
+                    };
+                }
+            }
+        }
+        // TriggerMap
+        if (player) {
+            battleObj.triggerMap = player.battleObj.triggerMap;
+        }
+        // HouseRooms
+        battleObj.houseRooms = {};
+        for (const house of Object.values(obj.profile.characterHouseRoomMap)) {
             battleObj.houseRooms[house.houseRoomHrid] = house.level;
         }
         return battleObj;
@@ -484,5 +672,7 @@
         addImportButtonForMWICombatSimulate();
         observeResultsForMWICombatSimulate();
     }
+
+    hookWS();
 
 })();
