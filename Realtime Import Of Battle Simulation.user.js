@@ -103,6 +103,10 @@
                 // ping-pong
                 break;
             }
+            case 'active_player_count_updated': {
+                // 活跃人数更新
+                break;
+            }
             case 'init_client_data': {
                 // 客户端数据
                 GM_setValue("init_client_data", message);
@@ -117,7 +121,7 @@
                 // 初始化信息
                 GM_setValue("init_character_data", message);
                 playerId = obj.character.id;
-                obj.battleObj = buildBattleObjFromInitData(obj);
+                obj.battleObj = buildBattleObjFromPlayer(obj);
                 saveCharacterData(obj);
                 break;
             }
@@ -125,34 +129,23 @@
                 // 角色详情
                 let player = getPlayerData(obj.profile.characterSkills[0].characterID)
                 let battleObj = buildBattleObjFromProfileShared(player, obj);
-                // if (!player) {
-                    player = {
-                        character: {
-                            id: battleObj.character.id,
-                            name: battleObj.character.name
-                        }
-                    }
-                // }
+                if (!player) {
+                    player = {}
+                    player.character = {}
+                    player.character.id = battleObj.character.id
+                    player.character.name = battleObj.character.name
+                }
                 player.battleObj = battleObj;
                 saveCharacterData(player);
                 break;
             }
-            case 'active_player_count_updated': {
-                // 活跃人数变更
-                break;
-            }
-            case 'combat_triggers_updated': {
-                // Trigger变更
-                break;
-            }
             case 'items_updated': {
-                // 物品变更
-                console.log(obj)
+                // 物品更新
                 let player = getPlayerData(playerId);
                 if (obj.endCharacterItems) {
                     for (const item of Object.values(obj.endCharacterItems)) {
                         if (item.itemLocationHrid !== "/item_locations/inventory") {
-                            // 装备变更
+                            // 装备更新
                             let equipment = player.battleObj.player.equipment;
                             equipment = equipment.filter(e => e.itemLocationHrid !== item.itemLocationHrid);
                             equipment.push({
@@ -167,8 +160,56 @@
                 }
                 break;
             }
-            case 'chat_message_received': {
-                // 聊天消息
+            case 'action_type_consumable_slots_updated': {
+                // 消耗栏更新
+                let player = getPlayerData(playerId);
+                player.actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
+                player.actionTypeFoodSlotsMap = obj.actionTypeFoodSlotsMap;
+                player.battleObj = buildBattleObjFromPlayer(player);
+                saveCharacterData(player);
+                break;
+            }
+            case 'abilities_updated': {
+                // 技能更新
+                let player = getPlayerData(playerId);
+                for (const ability of obj.endCharacterAbilities) {
+                    if (ability.slotNumber === 0) {
+                        player.combatUnit.combatAbilities = player.combatUnit.combatAbilities.filter(a => a.abilityHrid !== ability.abilityHrid)
+                    } else {
+                        player.combatUnit.combatAbilities.splice(ability.slotNumber - 1, 0, {
+                            abilityHrid: ability.abilityHrid,
+                            level: ability.level,
+                            experience: ability.experience,
+                            availableTime: ability.updatedAt
+                        });
+                    }
+                }
+                player.battleObj = buildBattleObjFromPlayer(player);
+                saveCharacterData(player);
+                break;
+            }
+            case 'combat_triggers_updated': {
+                let player = getPlayerData(playerId);
+                if (obj.combatTriggerTypeHrid === '/combat_trigger_types/ability') {
+                    // 技能栏 Trigger 更新
+                    player.abilityCombatTriggersMap[obj.abilityHrid] = obj.combatTriggers;
+                } else if (obj.combatTriggerTypeHrid === '/combat_trigger_types/consumable') {
+                    // 消耗栏 Trigger 更新
+                    player.consumableCombatTriggersMap[obj.itemHrid] = obj.combatTriggers;
+                } else {
+                    break;
+                }
+                player.battleObj = buildBattleObjFromPlayer(player);
+                saveCharacterData(player);
+                break;
+            }
+            case 'all_combat_triggers_updated': {
+                // 所有 Triggers 更新
+                let player = getPlayerData(playerId);
+                player.abilityCombatTriggersMap = obj.abilityCombatTriggersMap;
+                player.consumableCombatTriggersMap = obj.consumableCombatTriggersMap;
+                player.battleObj = buildBattleObjFromPlayer(player);
+                saveCharacterData(player);
                 break;
             }
             case 'party_update': {
@@ -178,16 +219,16 @@
                 saveCharacterData(player);
                 break;
             }
+            case 'chat_message_received': {
+                // 聊天消息
+                break;
+            }
             case 'action_completed': {
                 // 行动完成
                 break;
             }
-            case 'action_type_consumable_slots_updated': {
-                // 行动消耗变更
-                break;
-            }
             default: {
-                console.log(obj)
+                // console.log(obj)
             }
         }
     }
@@ -195,13 +236,13 @@
     // 添加实时导入按钮
     function addImportButtonForMWICombatSimulate() {
         const checkElem = () => {
-            const btnImport = document.querySelector(`button#buttonImportExport`);
-            if (btnImport) {
+            const btnEquipSets = document.querySelector(`button#buttonEquipmentSets`);
+            if (btnEquipSets) {
                 clearInterval(timer);
 
                 let divRow = document.createElement("div");
                 divRow.className = "row";
-                btnImport.parentElement.parentElement.append(divRow);
+                btnEquipSets.parentElement.parentElement.prepend(divRow);
 
                 // 导入按钮
                 let div1 = document.createElement("div");
@@ -370,7 +411,7 @@
     }
 
     // 构建战斗模拟信息(InitData)
-    function buildBattleObjFromInitData(obj) {
+    function buildBattleObjFromPlayer(obj) {
         let battleObj = {};
         // Base
         battleObj.character = {}
