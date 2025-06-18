@@ -254,7 +254,7 @@
                 saveCharacterData(player);
                 break;
             }
-            case 'party_update': {
+            case 'party_updated': {
                 // 队伍更新
                 let player = getPlayerData(playerId);
                 player.partyInfo = obj.partyInfo;
