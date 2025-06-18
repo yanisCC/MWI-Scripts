@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.1.3
+// @version      0.1.4
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -10,10 +10,7 @@
 // @license      CC-BY-NC-SA-4.0
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
-// @match        https://shykai.github.io/mwisim.github.io/*
-// @match        https://shykai.github.io/MWICombatSimulatorTest/dist/*
-// @match        https://bkn46.github.io/mwisim.github.io/*
-// @match        https://bkn46.github.io/MWICombatSimulatorTest/dist/*
+// @match        https://*/MWICombatSimulatorTest/dist/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // ==/UserScript==
@@ -800,7 +797,7 @@
         clientData.abilityDetailMap = obj.abilityDetailMap;
     }
 
-    if (document.URL.includes("github.io/MWICombatSimulatorTest/")) {
+    if (document.URL.includes("/MWICombatSimulatorTest/dist")) {
         addImportButtonForMWICombatSimulate();
         observeResultsForMWICombatSimulate();
     }
