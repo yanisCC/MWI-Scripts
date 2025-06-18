@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.1.1
+// @version      0.1.2
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -209,10 +209,15 @@
             case 'abilities_updated': {
                 // 技能更新
                 let player = getPlayerData(playerId);
+                // 技能移除
                 for (const ability of obj.endCharacterAbilities) {
                     if (ability.slotNumber === 0) {
                         player.combatUnit.combatAbilities = player.combatUnit.combatAbilities.filter(a => a.abilityHrid !== ability.abilityHrid)
-                    } else {
+                    }
+                }
+                // 技能变更
+                for (const ability of obj.endCharacterAbilities) {
+                    if (ability.slotNumber > 0) {
                         player.combatUnit.combatAbilities.splice(ability.slotNumber - 1, 0, {
                             abilityHrid: ability.abilityHrid,
                             level: ability.level,
