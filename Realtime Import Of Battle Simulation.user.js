@@ -209,16 +209,17 @@
             case 'abilities_updated': {
                 // 技能更新
                 let player = getPlayerData(playerId);
+                let abilities = player.combatUnit.combatAbilities;
                 // 技能移除
                 for (const ability of obj.endCharacterAbilities) {
                     if (ability.slotNumber === 0) {
-                        player.combatUnit.combatAbilities = player.combatUnit.combatAbilities.filter(a => a.abilityHrid !== ability.abilityHrid)
+                        abilities = abilities.filter(a => a.abilityHrid !== ability.abilityHrid)
                     }
                 }
                 // 技能变更
                 for (const ability of obj.endCharacterAbilities) {
                     if (ability.slotNumber > 0) {
-                        player.combatUnit.combatAbilities.splice(ability.slotNumber - 1, 0, {
+                        abilities.splice(ability.slotNumber - 1, 0, {
                             abilityHrid: ability.abilityHrid,
                             level: ability.level,
                             experience: ability.experience,
@@ -226,6 +227,7 @@
                         });
                     }
                 }
+                player.combatUnit.combatAbilities = abilities;
                 player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
