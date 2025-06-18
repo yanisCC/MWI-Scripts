@@ -2,9 +2,9 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.0.1
+// @version      0.1.0
 // @description  Battle simulation imports the realtime configuration of the current character.
-// @description:zh-CN  战斗模拟导入当前角色实时配置
+// @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
 // @author       Yannis
 // @license      CC-BY-NC-SA-4.0
@@ -16,6 +16,15 @@
 // @grant        GM_setValue
 // ==/UserScript==
 
+/**
+ * 感谢 'MWITool' 为本脚本提供的技术参考，本脚本部分代码来源于 MWITool，请勿删除本版权声明
+ * 本脚本若有任何问题，欢迎随时与开发者联系与反馈，感谢使用
+ * Thanks 'MWITool' for the technical reference provided for this script.
+ * Some of the code in this script is sourced from MWITool.
+ * Please do not delete this copyright notice.
+ *
+ * https://greasyfork.org/en/scripts/494467-mwitools
+ */
 
 (function () {
     'use strict';
