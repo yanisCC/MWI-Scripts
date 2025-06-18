@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.1.0
+// @version      0.1.1
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -12,6 +12,8 @@
 // @match        https://test.milkywayidle.com/*
 // @match        https://shykai.github.io/mwisim.github.io/*
 // @match        https://shykai.github.io/MWICombatSimulatorTest/dist/*
+// @match        https://bkn46.github.io/mwisim.github.io/*
+// @match        https://bkn46.github.io/MWICombatSimulatorTest/dist/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // ==/UserScript==
@@ -28,6 +30,10 @@
 
 (function () {
     'use strict';
+
+    // 语言设定
+    const isZHInGameSetting = localStorage.getItem("i18nextLng")?.toLowerCase()?.startsWith("zh");
+    let isZH = isZHInGameSetting;
 
     let playerId;
     let clientData = {};
@@ -55,7 +61,7 @@
             try {
                 handleMessage(message);
             } catch (e) {
-                console.log(`处理聊天消息时出错: ${e}`)
+                console.log(`处理消息协议时出错: ${e}`)
             }
             return message;
         }
@@ -130,7 +136,7 @@
                 // 初始化信息
                 GM_setValue("init_character_data", message);
                 playerId = obj.character.id;
-                obj.battleObj = buildBattleObjFromPlayer(obj);
+                obj.battleObj = buildBattleObjFromPlayer(obj, true);
                 saveCharacterData(obj);
                 break;
             }
@@ -139,6 +145,7 @@
                 let player = getPlayerData(obj.profile.characterSkills[0].characterID)
                 let battleObj = buildBattleObjFromProfileShared(player, obj);
                 if (!player) {
+                    // 不是本角色
                     player = {}
                     player.character = {}
                     player.character.id = battleObj.character.id
@@ -154,6 +161,7 @@
                     let player = getPlayerData(battlePlayer.character.id);
                     let battleObj = buildBattleObjFromNewBattle(player, battlePlayer);
                     if (!player) {
+                        // 不是本角色
                         player = {}
                         player.character = {}
                         player.character.id = battleObj.character.id
@@ -167,9 +175,10 @@
             case 'items_updated': {
                 // 物品更新
                 let player = getPlayerData(playerId);
+                let update = false;
                 if (obj.endCharacterItems) {
                     for (const item of Object.values(obj.endCharacterItems)) {
-                        if (item.itemLocationHrid !== "/item_locations/inventory") {
+                        if (item.itemLocationHrid !== "/item_locations/inventory" && item.count > 0) {
                             // 装备更新
                             let equipment = player.battleObj.player.equipment;
                             equipment = equipment.filter(e => e.itemLocationHrid !== item.itemLocationHrid);
@@ -179,9 +188,12 @@
                                 enhancementLevel: item.enhancementLevel,
                             })
                             player.battleObj.player.equipment = equipment;
-                            saveCharacterData(player);
+                            update = true;
                         }
                     }
+                }
+                if (update) {
+                    saveCharacterData(player);
                 }
                 break;
             }
@@ -190,7 +202,7 @@
                 let player = getPlayerData(playerId);
                 player.actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
                 player.actionTypeFoodSlotsMap = obj.actionTypeFoodSlotsMap;
-                player.battleObj = buildBattleObjFromPlayer(player);
+                player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
             }
@@ -209,7 +221,7 @@
                         });
                     }
                 }
-                player.battleObj = buildBattleObjFromPlayer(player);
+                player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
             }
@@ -224,7 +236,7 @@
                 } else {
                     break;
                 }
-                player.battleObj = buildBattleObjFromPlayer(player);
+                player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
             }
@@ -233,7 +245,7 @@
                 let player = getPlayerData(playerId);
                 player.abilityCombatTriggersMap = { ...player.abilityCombatTriggersMap, ...obj.abilityCombatTriggersMap };
                 player.consumableCombatTriggersMap = { ...player.consumableCombatTriggersMap, ...obj.consumableCombatTriggersMap };
-                player.battleObj = buildBattleObjFromPlayer(player);
+                player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
             }
@@ -275,7 +287,7 @@
                 divRow.append(div1);
                 let button = document.createElement("button");
                 div1.append(button);
-                button.textContent = "实时导入数据";
+                button.textContent = isZH ? "实时导入数据" : "Real-time Import";
                 button.className = "btn btn-warning";
                 button.onclick = function () {
                     const btnGetPrice = document.querySelector(`button#buttonGetPrices`);
@@ -337,7 +349,7 @@
                             battleData[i] = JSON.stringify(memberData.battleObj);
                             continue;
                         } else {
-                            playerNames[i] = "需要点开资料";
+                            playerNames[i] = isZH ? "需要点开个人资料" : "Open profile in game";
                             imported[i] = true;
                             battleData[i] = BLANK_PLAYER_JSON_STR;
                         }
@@ -395,10 +407,10 @@
         // 模拟时长
         document.querySelector(`input#inputSimulationTime`).value = 24;
 
-        button.textContent = "成功导入数据";
+        button.textContent = isZH ? "成功导入数据" : "Imported Successful";
         button.className = "btn btn-success";
         setTimeout(() => {
-            button.textContent = "实时导入数据";
+            button.textContent = isZH ? "实时导入数据" : "Real-time Import";
             button.className = "btn btn-warning";
         }, 1000);
 
@@ -436,8 +448,8 @@
     }
 
     // 构建战斗模拟信息(InitData)
-    function buildBattleObjFromPlayer(obj) {
-        let battleObj = {};
+    function buildBattleObjFromPlayer(obj, init) {
+        let battleObj = init ? {} : obj.battleObj;
         // Base
         battleObj.character = {}
         battleObj.character.id = obj.character.id;
@@ -445,35 +457,37 @@
         battleObj.character.gameMode = obj.character.gameMode;
         battleObj.timestamp = Date.now();
         battleObj.valid = true;
-        // Levels
-        battleObj.player = {}
-        for (const skill of obj.characterSkills) {
-            if (skill.skillHrid.includes("stamina")) {
-                battleObj.player.staminaLevel = skill.level;
-            } else if (skill.skillHrid.includes("intelligence")) {
-                battleObj.player.intelligenceLevel = skill.level;
-            } else if (skill.skillHrid.includes("attack")) {
-                battleObj.player.attackLevel = skill.level;
-            } else if (skill.skillHrid.includes("power")) {
-                battleObj.player.powerLevel = skill.level;
-            } else if (skill.skillHrid.includes("defense")) {
-                battleObj.player.defenseLevel = skill.level;
-            } else if (skill.skillHrid.includes("ranged")) {
-                battleObj.player.rangedLevel = skill.level;
-            } else if (skill.skillHrid.includes("magic")) {
-                battleObj.player.magicLevel = skill.level;
+        if (init) {
+            // Levels
+            battleObj.player = {}
+            for (const skill of obj.characterSkills) {
+                if (skill.skillHrid.includes("stamina")) {
+                    battleObj.player.staminaLevel = skill.level;
+                } else if (skill.skillHrid.includes("intelligence")) {
+                    battleObj.player.intelligenceLevel = skill.level;
+                } else if (skill.skillHrid.includes("attack")) {
+                    battleObj.player.attackLevel = skill.level;
+                } else if (skill.skillHrid.includes("power")) {
+                    battleObj.player.powerLevel = skill.level;
+                } else if (skill.skillHrid.includes("defense")) {
+                    battleObj.player.defenseLevel = skill.level;
+                } else if (skill.skillHrid.includes("ranged")) {
+                    battleObj.player.rangedLevel = skill.level;
+                } else if (skill.skillHrid.includes("magic")) {
+                    battleObj.player.magicLevel = skill.level;
+                }
             }
-        }
-        // Equipments
-        battleObj.player.equipment = [];
-        if (obj.characterItems) {
-            for (const item of obj.characterItems) {
-                if (!item.itemLocationHrid.includes("/item_locations/inventory")) {
-                    battleObj.player.equipment.push({
-                        itemLocationHrid: item.itemLocationHrid,
-                        itemHrid: item.itemHrid,
-                        enhancementLevel: item.enhancementLevel,
-                    });
+            // Equipments
+            battleObj.player.equipment = [];
+            if (obj.characterItems) {
+                for (const item of obj.characterItems) {
+                    if (!item.itemLocationHrid.includes("/item_locations/inventory")) {
+                        battleObj.player.equipment.push({
+                            itemLocationHrid: item.itemLocationHrid,
+                            itemHrid: item.itemHrid,
+                            enhancementLevel: item.enhancementLevel,
+                        });
+                    }
                 }
             }
         }
@@ -779,7 +793,7 @@
         clientData.abilityDetailMap = obj.abilityDetailMap;
     }
 
-    if (document.URL.includes("shykai.github.io/MWICombatSimulatorTest/")) {
+    if (document.URL.includes("github.io/MWICombatSimulatorTest/")) {
         addImportButtonForMWICombatSimulate();
         observeResultsForMWICombatSimulate();
     }
