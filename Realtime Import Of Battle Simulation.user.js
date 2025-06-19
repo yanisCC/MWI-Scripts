@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.1.4
+// @version      0.1.5
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -27,6 +27,10 @@
 
 (function () {
     'use strict';
+
+    const debug = console.log.bind(null, '%c[BatSync]%c', 'color:cyan', 'color:black');
+    const info = console.log.bind(null, '%c[BatSync]%c', 'color:green', 'color:black');
+    const error = console.log.bind(null, '%c[BatSync]%c', 'color:red', 'color:black');
 
     // 语言设定
     const isZHInGameSetting = localStorage.getItem("i18nextLng")?.toLowerCase()?.startsWith("zh");
@@ -58,7 +62,8 @@
             try {
                 handleMessage(message);
             } catch (e) {
-                console.log(`处理消息协议时出错: ${e}`)
+                error(`处理消息协议时出错: ${e}`);
+                console.log(e.stack);
             }
             return message;
         }
@@ -271,7 +276,7 @@
                 break;
             }
             default: {
-                // console.log(obj)
+                // debug(obj);
             }
         }
     }
