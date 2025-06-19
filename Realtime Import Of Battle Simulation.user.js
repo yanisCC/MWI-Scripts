@@ -206,25 +206,27 @@
             case 'abilities_updated': {
                 // 技能更新
                 let player = getPlayerData(playerId);
-                let abilities = player.combatUnit.combatAbilities;
-                // 技能移除
-                for (const ability of obj.endCharacterAbilities) {
-                    if (ability.slotNumber === 0) {
-                        abilities = abilities.filter(a => a.abilityHrid !== ability.abilityHrid)
+                let equippedAbilities = JSON.parse(JSON.stringify(player.combatUnit.combatAbilities));
+                for (let i = equippedAbilities.length; i < 5; i++) {
+                    equippedAbilities.push({})
+                }
+                if (obj.endCharacterAbilities) {
+                    for (const ability of obj.endCharacterAbilities) {
+                        const aIndex = equippedAbilities.findIndex(obj => obj.abilityHrid === ability.abilityHrid);
+                        if (aIndex >= 0) {
+                            equippedAbilities[aIndex] = {}
+                        }
+                        if (ability.slotNumber > 0) {
+                            equippedAbilities.splice(ability.slotNumber - 1, 0, {
+                                abilityHrid: ability.abilityHrid,
+                                level: ability.level,
+                                experience: ability.experience,
+                                availableTime: ability.updatedAt
+                            })
+                        }
                     }
                 }
-                // 技能变更
-                for (const ability of obj.endCharacterAbilities) {
-                    if (ability.slotNumber > 0) {
-                        abilities.splice(ability.slotNumber - 1, 0, {
-                            abilityHrid: ability.abilityHrid,
-                            level: ability.level,
-                            experience: ability.experience,
-                            availableTime: ability.updatedAt
-                        });
-                    }
-                }
-                player.combatUnit.combatAbilities = abilities;
+                player.combatUnit.combatAbilities = equippedAbilities.filter(e => e.abilityHrid && e.abilityHrid.length > 0);
                 player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
                 break;
@@ -542,11 +544,15 @@
                     battleObj.abilities[0] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 } else if (ability) {
                     battleObj.abilities[index++] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 }
             }
@@ -692,11 +698,15 @@
                     battleObj.abilities[0] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 } else if (ability) {
                     battleObj.abilities[index++] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 }
             }
@@ -770,11 +780,15 @@
                     battleObj.abilities[0] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 } else if (ability) {
                     battleObj.abilities[index++] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
+                        experience: ability.experience,
+                        availableTime: ability.updatedAt
                     };
                 }
             }
