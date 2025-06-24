@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.1.5
+// @version      0.2.1
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -11,19 +11,20 @@
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
 // @match        https://*/MWICombatSimulatorTest/dist/*
+// @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @connect      textdb.online
+// @require      https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js
 // ==/UserScript==
 
-/**
- * 感谢 'MWITool' 为本脚本提供的技术参考，本脚本部分代码来源于 MWITool，请勿删除本版权声明
- * 本脚本若有任何问题，欢迎随时与开发者联系与反馈，感谢使用
- * Thanks 'MWITool' for the technical reference provided for this script.
- * Some of the code in this script is sourced from MWITool.
- * Please do not delete this copyright notice.
- *
- * https://greasyfork.org/en/scripts/494467-mwitools
- */
+// 感谢 'MWITool' 为本脚本提供的技术参考，本脚本部分代码来源于 MWITool，请勿删除本版权声明
+// 本脚本若有任何问题，欢迎随时与开发者联系与反馈，感谢使用
+// Thanks 'MWITool' for the technical reference provided for this script.
+// Some of the code in this script is sourced from MWITool.
+// Please do not delete this copyright notice.
+//
+// https://greasyfork.org/en/scripts/494467-mwitools
 
 (function () {
     'use strict';
@@ -37,37 +38,81 @@
     let isZH = isZHInGameSetting;
 
     let playerId;
+    let firstImport = true;
     let clientData = {};
 
-    // 监听WebSocket
-    function hookWS() {
-        const dataProperty = Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data");
-        const oriGet = dataProperty.get;
+    // #region TextDB
 
-        dataProperty.get = hookedGet;
-        Object.defineProperty(MessageEvent.prototype, "data", dataProperty);
+    // 从TextDB获取数据
+    async function getDataFromTextDB(key) {
+        // debug(`Get data from TextDB: ${key}`);
 
-        function hookedGet() {
-            const socket = this.currentTarget;
-            if (!(socket instanceof WebSocket)) {
-                return oriGet.call(this);
-            }
-            if (socket.url.indexOf("api.milkywayidle.com/ws") <= -1 && socket.url.indexOf("api-test.milkywayidle.com/ws") <= -1) {
-                return oriGet.call(this);
-            }
+        const response = await new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://textdb.online/${key}`,
+                onload: resolve,
+                onerror: (e) => resolve({ status: 500, error: e })
+            })
+        });
+        if (response.status !== 200) {
+            error(`Error get from TextDB`, {
+                key: key,
+                status: response.status,
+                error: response.error
+            });
+        } else {
+            debug(`Get data from TextDB`, {
+                key: key,
+                data: response.responseText
+            });
+        }
 
-            const message = oriGet.call(this);
-            Object.defineProperty(this, "data", { value: message }); // Anti-loop
+        return response.responseText;
+    }
 
-            try {
-                handleMessage(message);
-            } catch (e) {
-                error(`处理消息协议时出错: ${e}`);
-                console.log(e.stack);
-            }
-            return message;
+    // 保存数据到TextDB
+    async function saveDataToTextDB(key, data) {
+        // debug("保存TextDB数据", {
+        //     key: key,
+        //     data: data
+        // });
+
+        const params = new URLSearchParams();
+        params.append('key', key);
+        params.append('value', data.toString());
+
+        const response = await new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: 'https://api.textdb.online/update/',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                data: params,
+                onload: resolve,
+                onerror: function (e) {
+                    error("Error saving to TextDB:", e);
+                    reject(e);
+                }
+            });
+        });
+
+        if (response.status !== 200) {
+            error('Failed saving to TextDB:', response);
+        } else {
+            debug(`Save data to TextDB success, key: ${key}`)
         }
     }
+
+    // 生成玩家唯一Key(MD5)
+    function getPlayerUniqueKey(characterId) {
+        return `mwi_${characterId}_${md5(md5(characterId))}`;
+    }
+
+    // #endregion
+
+    // #region 角色数据
 
     // 获取客户端初始化数据
     function getInitClientData() {
@@ -108,6 +153,40 @@
         GM_setValue("mwi_players_data", JSON.stringify(playersData));
     }
 
+    // #endregion
+
+    // #region HookMessage
+
+    // 监听WebSocket
+    function hookWS() {
+        const dataProperty = Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data");
+        const oriGet = dataProperty.get;
+
+        dataProperty.get = hookedGet;
+        Object.defineProperty(MessageEvent.prototype, "data", dataProperty);
+
+        function hookedGet() {
+            const socket = this.currentTarget;
+            if (!(socket instanceof WebSocket)) {
+                return oriGet.call(this);
+            }
+            if (socket.url.indexOf("api.milkywayidle.com/ws") <= -1 && socket.url.indexOf("api-test.milkywayidle.com/ws") <= -1) {
+                return oriGet.call(this);
+            }
+
+            const message = oriGet.call(this);
+            Object.defineProperty(this, "data", { value: message }); // Anti-loop
+
+            try {
+                handleMessage(message);
+            } catch (e) {
+                error(`处理消息协议时出错: ${e}`);
+                console.log(e.stack);
+            }
+            return message;
+        }
+    }
+
     // 消息处理
     function handleMessage(message) {
         let obj = JSON.parse(message);
@@ -138,8 +217,14 @@
                 // 初始化信息
                 GM_setValue("init_character_data", message);
                 GM_setValue("current_character_id", playerId);
+                let player = getPlayerData(playerId);
+                if (player) {
+                    obj.abilityCombatTriggersMap = { ...player.abilityCombatTriggersMap, ...obj.abilityCombatTriggersMap }
+                    obj.consumableCombatTriggersMap = { ...player.consumableCombatTriggersMap, ...obj.consumableCombatTriggersMap }
+                }
                 obj.battleObj = buildBattleObjFromPlayer(obj, true);
                 saveCharacterData(obj);
+                saveDataToTextDB(getPlayerUniqueKey(playerId), JSON.stringify(obj.battleObj));
                 break;
             }
             case 'profile_shared': {
@@ -258,6 +343,7 @@
                 }
                 player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
+                saveDataToTextDB(getPlayerUniqueKey(playerId), JSON.stringify(player.battleObj));
                 break;
             }
             case 'all_combat_triggers_updated': {
@@ -270,6 +356,7 @@
                 player.consumableCombatTriggersMap = { ...player.consumableCombatTriggersMap, ...obj.consumableCombatTriggersMap };
                 player.battleObj = buildBattleObjFromPlayer(player, false);
                 saveCharacterData(player);
+                saveDataToTextDB(getPlayerUniqueKey(playerId), JSON.stringify(player.battleObj));
                 break;
             }
             case 'party_updated': {
@@ -296,182 +383,9 @@
         }
     }
 
-    // 添加实时导入按钮
-    function addImportButtonForMWICombatSimulate() {
-        const checkElem = () => {
-            const btnEquipSets = document.querySelector(`button#buttonEquipmentSets`);
-            if (btnEquipSets) {
-                clearInterval(timer);
+    // #endregion
 
-                let divRow = document.createElement("div");
-                divRow.className = "row";
-                btnEquipSets.parentElement.parentElement.prepend(divRow);
-
-                // 导入按钮
-                let div1 = document.createElement("div");
-                div1.className = "col-md-auto mb-3 pt-1";
-                divRow.append(div1);
-                let button = document.createElement("button");
-                div1.append(button);
-                button.textContent = isZH ? "实时导入数据" : "Real-time Import";
-                button.className = "btn btn-warning";
-                button.onclick = function () {
-                    const btnGetPrice = document.querySelector(`button#buttonGetPrices`);
-                    if (btnGetPrice) {
-                        btnGetPrice.click();
-                    }
-                    importDataForMWICombatSimulate(button);
-                    return false;
-                };
-            }
-        };
-        let timer = setInterval(checkElem, 200);
-    }
-
-    // 导入数据
-    async function importDataForMWICombatSimulate(button) {
-        clientData = getInitClientData();
-        let player = getCurrentPlayerData();
-
-        const BLANK_PLAYER_JSON_STR = `{\"player\":{\"attackLevel\":1,\"magicLevel\":1,\"powerLevel\":1,\"rangedLevel\":1,\"defenseLevel\":1,\"staminaLevel\":1,\"intelligenceLevel\":1,\"equipment\":[]},\"food\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"drinks\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"abilities\":[{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"}],\"triggerMap\":{},\"zone\":\"/actions/combat/fly\",\"simulationTime\":\"100\",\"houseRooms\":{\"/house_rooms/dairy_barn\":0,\"/house_rooms/garden\":0,\"/house_rooms/log_shed\":0,\"/house_rooms/forge\":0,\"/house_rooms/workshop\":0,\"/house_rooms/sewing_parlor\":0,\"/house_rooms/kitchen\":0,\"/house_rooms/brewery\":0,\"/house_rooms/laboratory\":0,\"/house_rooms/observatory\":0,\"/house_rooms/dining_room\":0,\"/house_rooms/library\":0,\"/house_rooms/dojo\":0,\"/house_rooms/gym\":0,\"/house_rooms/armory\":0,\"/house_rooms/archery_range\":0,\"/house_rooms/mystical_study\":0}}`;
-
-        const playerNames = {};
-        const imported = {};
-        const battleData = {};
-        let isParty = false;
-        let zone = "/actions/combat/fly";
-        let isZoneDungeon = false;
-
-        if (!player?.partyInfo?.partySlotMap) {
-            // 个人
-            playerNames[0] = player.character.name;
-            imported[0] = true;
-            battleData[0] = player.battleObj;
-            // Zone
-            for (const action of player.characterActions) {
-                if (action && action.actionHrid.includes("/actions/combat/")) {
-                    zone = action.actionHrid;
-                    isZoneDungeon = clientData.actionDetailMap[action.actionHrid]?.combatZoneInfo?.isDungeon;
-                    break;
-                }
-            }
-        } else {
-            // 队伍
-            isParty = true;
-            let i = 0;
-            for (const member of Object.values(player.partyInfo.partySlotMap)) {
-                i++;
-                if (member.characterID) {
-                    if (member.characterID === player.character.id) {
-                        playerNames[i] = player.character.name;
-                        imported[i] = true;
-                        battleData[i] = JSON.stringify(player.battleObj);
-                        continue;
-                    } else {
-                        let memberData = getPlayerData(member.characterID);
-                        if (memberData && memberData.battleObj?.valid) {
-                            playerNames[i] = memberData.character.name;
-                            imported[i] = true;
-                            battleData[i] = JSON.stringify(memberData.battleObj);
-                            continue;
-                        } else {
-                            playerNames[i] = isZH ? "需要点开个人资料" : "Open profile in game";
-                            imported[i] = true;
-                            battleData[i] = BLANK_PLAYER_JSON_STR;
-                        }
-                    }
-                }
-            }
-            // Zone
-            zone = player.partyInfo?.party?.actionHrid;
-            isZoneDungeon = clientData.actionDetailMap[zone]?.combatZoneInfo?.isDungeon;
-        }
-
-        // Select zone or dungeon
-        if (zone) {
-            if (isZoneDungeon) {
-                document.querySelector(`input#simDungeonToggle`).checked = true;
-                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
-                const selectDungeon = document.querySelector(`select#selectDungeon`);
-                for (let i = 0; i < selectDungeon.options.length; i++) {
-                    if (selectDungeon.options[i].value === zone) {
-                        selectDungeon.options[i].selected = true;
-                        break;
-                    }
-                }
-            } else {
-                document.querySelector(`input#simDungeonToggle`).checked = false;
-                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
-                const selectZone = document.querySelector(`select#selectZone`);
-                for (let i = 0; i < selectZone.options.length; i++) {
-                    if (selectZone.options[i].value === zone) {
-                        selectZone.options[i].selected = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        for (let i = 1; i <= 5; i++) {
-            if (!battleData[i]) {
-                battleData[i] = BLANK_PLAYER_JSON_STR;
-                playerNames[i] = `Player ${i}`;
-                imported[i] = false;
-            }
-            document.querySelector(`a#player${i}-tab`).textContent = playerNames[i];
-            if (document.querySelector(`input#player${i}.form-check-input.player-checkbox`)) {
-                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).checked = imported[i];
-                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).dispatchEvent(new Event("change"));
-            }
-        }
-
-        document.querySelector(`a#group-combat-tab`).click();
-        const editImport = document.querySelector(`input#inputSetGroupCombatAll`);
-        editImport.value = JSON.stringify(battleData);
-        document.querySelector(`button#buttonImportSet`).click();
-
-        // 模拟时长
-        document.querySelector(`input#inputSimulationTime`).value = 24;
-
-        button.textContent = isZH ? "成功导入数据" : "Imported Successful";
-        button.className = "btn btn-success";
-        setTimeout(() => {
-            button.textContent = isZH ? "实时导入数据" : "Real-time Import";
-            button.className = "btn btn-warning";
-        }, 1000);
-
-        if (!isParty) {
-            setTimeout(() => {
-                document.querySelector(`button#buttonStartSimulation`).click();
-            }, 500);
-        }
-    }
-
-    // 监听模拟结果
-    async function observeResultsForMWICombatSimulate() {
-        let resultDiv = document.querySelector(`div.row`)?.querySelectorAll(`div.col-md-5`)?.[2]?.querySelector(`div.row > div.col-md-5`);
-        while (!resultDiv) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            resultDiv = document.querySelector(`div.row`)?.querySelectorAll(`div.col-md-5`)?.[2]?.querySelector(`div.row > div.col-md-5`);
-        }
-
-        const deathDiv = document.querySelector(`div#simulationResultPlayerDeaths`);
-        const expDiv = document.querySelector(`div#simulationResultExperienceGain`);
-        const consumeDiv = document.querySelector(`div#simulationResultConsumablesUsed`);
-        deathDiv.style.backgroundColor = "#FFEAE9";
-        deathDiv.style.color = "black";
-        expDiv.style.backgroundColor = "#CDFFDD";
-        expDiv.style.color = "black";
-        consumeDiv.style.backgroundColor = "#F0F8FF";
-        consumeDiv.style.color = "black";
-
-        let div = document.createElement("div");
-        div.id = "tillLevel";
-        div.style.backgroundColor = "#FFFFE0";
-        div.style.color = "black";
-        div.textContent = "";
-        resultDiv.append(div);
-    }
+    // #region Builders
 
     // 构建战斗模拟信息(InitData)
     function buildBattleObjFromPlayer(obj, init) {
@@ -819,6 +733,236 @@
         battleObj.houseRooms = { ...battleObj.houseRooms };
         return battleObj;
     }
+
+    // #endregion
+
+    // #region Battle Simulater
+
+    // 添加实时导入按钮
+    function addImportButtonForMWICombatSimulate() {
+        const checkElem = () => {
+            const btnEquipSets = document.querySelector(`button#buttonEquipmentSets`);
+            if (btnEquipSets) {
+                clearInterval(timer);
+
+                let divRow = document.createElement("div");
+                divRow.className = "row";
+                btnEquipSets.parentElement.parentElement.prepend(divRow);
+
+                // 导入按钮
+                let div1 = document.createElement("div");
+                div1.className = "mb-3 pt-2";
+                divRow.append(div1);
+                let button1 = document.createElement("button");
+                div1.append(button1);
+                button1.textContent = isZH ? "实时导入本地数据" : "Real-time Import From Local";
+                button1.className = "btn btn-warning";
+                button1.onclick = function () {
+                    const btnGetPrice = document.querySelector(`button#buttonGetPrices`);
+                    if (btnGetPrice) {
+                        btnGetPrice.click();
+                    }
+                    importDataForMWICombatSimulate(button1, false);
+                    return false;
+                };
+
+                // 网络导入按钮
+                let div2 = document.createElement("div");
+                div2.className = "mb-3 pt-1";
+                divRow.append(div2);
+                let button2 = document.createElement("button");
+                div2.append(button2);
+                button2.textContent = isZH ? "实时导入网络云数据" : "Real-time Import From Network";
+                button2.className = "btn btn-warning";
+                button2.onclick = function () {
+                    const btnGetPrice = document.querySelector(`button#buttonGetPrices`);
+                    if (btnGetPrice) {
+                        btnGetPrice.click();
+                    }
+                    importDataForMWICombatSimulate(button2, true);
+                    return false;
+                };
+            }
+        };
+        let timer = setInterval(checkElem, 200);
+    }
+
+    // 导入数据
+    async function importDataForMWICombatSimulate(button, readShareData = false) {
+        if (!firstImport) {
+            let userConfirm = window.confirm(isZH ? "是否要覆盖当前数据" : "Do you want to overwrite the current data?");
+            if (!userConfirm) {
+                return;
+            }
+        }
+        firstImport = false;
+        let preTextContent = button.textContent;
+        let preClassName = button.className;
+        button.textContent = isZH ? "正在导入数据..." : "Importing...";
+        button.className = "btn btn-warning";
+        button.disabled = true;
+
+        clientData = getInitClientData();
+        let player = getCurrentPlayerData();
+
+        const BLANK_PLAYER_JSON_STR = `{\"player\":{\"attackLevel\":1,\"magicLevel\":1,\"powerLevel\":1,\"rangedLevel\":1,\"defenseLevel\":1,\"staminaLevel\":1,\"intelligenceLevel\":1,\"equipment\":[]},\"food\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"drinks\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"abilities\":[{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"}],\"triggerMap\":{},\"zone\":\"/actions/combat/fly\",\"simulationTime\":\"100\",\"houseRooms\":{\"/house_rooms/dairy_barn\":0,\"/house_rooms/garden\":0,\"/house_rooms/log_shed\":0,\"/house_rooms/forge\":0,\"/house_rooms/workshop\":0,\"/house_rooms/sewing_parlor\":0,\"/house_rooms/kitchen\":0,\"/house_rooms/brewery\":0,\"/house_rooms/laboratory\":0,\"/house_rooms/observatory\":0,\"/house_rooms/dining_room\":0,\"/house_rooms/library\":0,\"/house_rooms/dojo\":0,\"/house_rooms/gym\":0,\"/house_rooms/armory\":0,\"/house_rooms/archery_range\":0,\"/house_rooms/mystical_study\":0}}`;
+
+        const playerNames = {};
+        const imported = {};
+        const battleData = {};
+        let isParty = false;
+        let zone = "/actions/combat/fly";
+        let isZoneDungeon = false;
+
+        if (!player?.partyInfo?.partySlotMap) {
+            // 个人
+            playerNames[0] = player.character.name;
+            imported[0] = true;
+            battleData[0] = player.battleObj;
+            // Zone
+            for (const action of player.characterActions) {
+                if (action && action.actionHrid.includes("/actions/combat/")) {
+                    zone = action.actionHrid;
+                    isZoneDungeon = clientData.actionDetailMap[action.actionHrid]?.combatZoneInfo?.isDungeon;
+                    break;
+                }
+            }
+        } else {
+
+            // 队伍
+            isParty = true;
+            let i = 0;
+            for (const member of Object.values(player.partyInfo.partySlotMap)) {
+                i++;
+                if (member.characterID) {
+                    if (member.characterID === player.character.id) {
+                        playerNames[i] = player.character.name;
+                        imported[i] = true;
+                        battleData[i] = JSON.stringify(player.battleObj);
+                        continue;
+                    } else {
+                        let memberData = getPlayerData(member.characterID);
+                        if (memberData && memberData.battleObj?.valid) {
+                            if (readShareData) {
+                                // 读取共享Trigger数据
+                                let sharedTextDBStr = await getDataFromTextDB(getPlayerUniqueKey(member.characterID));
+                                if (sharedTextDBStr) {
+                                    let sharedTextDB = JSON.parse(sharedTextDBStr);
+                                    memberData.battleObj.triggerMap = {
+                                        ...memberData.battleObj.triggerMap,
+                                        ...sharedTextDB.triggerMap
+                                    }
+                                }
+                            }
+                            playerNames[i] = memberData.character.name;
+                            imported[i] = true;
+                            battleData[i] = JSON.stringify(memberData.battleObj);
+                            continue;
+                        } else {
+                            playerNames[i] = isZH ? "需要点开个人资料" : "Open profile in game";
+                            imported[i] = true;
+                            battleData[i] = BLANK_PLAYER_JSON_STR;
+                        }
+                    }
+                }
+            }
+            // Zone
+            zone = player.partyInfo?.party?.actionHrid;
+            isZoneDungeon = clientData.actionDetailMap[zone]?.combatZoneInfo?.isDungeon;
+        }
+
+        // Select zone or dungeon
+        if (zone) {
+            if (isZoneDungeon) {
+                document.querySelector(`input#simDungeonToggle`).checked = true;
+                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
+                const selectDungeon = document.querySelector(`select#selectDungeon`);
+                for (let i = 0; i < selectDungeon.options.length; i++) {
+                    if (selectDungeon.options[i].value === zone) {
+                        selectDungeon.options[i].selected = true;
+                        break;
+                    }
+                }
+            } else {
+                document.querySelector(`input#simDungeonToggle`).checked = false;
+                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
+                const selectZone = document.querySelector(`select#selectZone`);
+                for (let i = 0; i < selectZone.options.length; i++) {
+                    if (selectZone.options[i].value === zone) {
+                        selectZone.options[i].selected = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (let i = 1; i <= 5; i++) {
+            if (!battleData[i]) {
+                battleData[i] = BLANK_PLAYER_JSON_STR;
+                playerNames[i] = `Player ${i}`;
+                imported[i] = false;
+            }
+            document.querySelector(`a#player${i}-tab`).textContent = playerNames[i];
+            if (document.querySelector(`input#player${i}.form-check-input.player-checkbox`)) {
+                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).checked = imported[i];
+                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).dispatchEvent(new Event("change"));
+            }
+        }
+
+        document.querySelector(`a#group-combat-tab`).click();
+        const editImport = document.querySelector(`input#inputSetGroupCombatAll`);
+        editImport.value = JSON.stringify(battleData);
+        document.querySelector(`button#buttonImportSet`).click();
+
+        // 模拟时长
+        document.querySelector(`input#inputSimulationTime`).value = 24;
+
+        button.textContent = isZH ? "成功导入数据" : "Imported Successful";
+        button.className = "btn btn-success";
+        button.disabled = false;
+        setTimeout(() => {
+            button.textContent = preTextContent;
+            button.className = preClassName;
+        }, 1500);
+
+        if (!isParty) {
+            setTimeout(() => {
+                document.querySelector(`button#buttonStartSimulation`).click();
+            }, 500);
+        }
+    }
+
+    // 监听模拟结果
+    async function observeResultsForMWICombatSimulate() {
+        let resultDiv = document.querySelector(`div.row`)?.querySelectorAll(`div.col-md-5`)?.[2]?.querySelector(`div.row > div.col-md-5`);
+        while (!resultDiv) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            resultDiv = document.querySelector(`div.row`)?.querySelectorAll(`div.col-md-5`)?.[2]?.querySelector(`div.row > div.col-md-5`);
+        }
+
+        const deathDiv = document.querySelector(`div#simulationResultPlayerDeaths`);
+        const expDiv = document.querySelector(`div#simulationResultExperienceGain`);
+        const consumeDiv = document.querySelector(`div#simulationResultConsumablesUsed`);
+        deathDiv.style.backgroundColor = "#FFEAE9";
+        deathDiv.style.color = "black";
+        expDiv.style.backgroundColor = "#CDFFDD";
+        expDiv.style.color = "black";
+        consumeDiv.style.backgroundColor = "#F0F8FF";
+        consumeDiv.style.color = "black";
+
+        let div = document.createElement("div");
+        div.id = "tillLevel";
+        div.style.backgroundColor = "#FFFFE0";
+        div.style.color = "black";
+        div.textContent = "";
+        resultDiv.append(div);
+    }
+
+    // #endregion
+
+    // ==================================================
+    // Script Start
+    // ==================================================
 
     if (localStorage.getItem("initClientData")) {
         const obj = JSON.parse(localStorage.getItem("initClientData"));
