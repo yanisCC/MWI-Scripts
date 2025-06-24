@@ -76,10 +76,9 @@
 
     // 获取当前角色数据
     function getCurrentPlayerData() {
-        let playersDataStr = GM_getValue("init_character_data", "");
-        if (playersDataStr) {
-            let playerData = JSON.parse(playersDataStr);
-            return getPlayerData(playerData.character.id);
+        let playerId = GM_getValue("current_character_id", null);
+        if (playerId) {
+            return getPlayerData(playerId);
         } else {
             return;
         }
@@ -135,9 +134,10 @@
                 break;
             }
             case 'init_character_data': {
+                playerId = obj.character.id;
                 // 初始化信息
                 GM_setValue("init_character_data", message);
-                playerId = obj.character.id;
+                GM_setValue("current_character_id", playerId);
                 obj.battleObj = buildBattleObjFromPlayer(obj, true);
                 saveCharacterData(obj);
                 break;
@@ -177,6 +177,9 @@
             case 'items_updated': {
                 // 物品更新
                 let player = getPlayerData(playerId);
+                if (!player) {
+                    break;
+                }
                 let update = false;
                 if (obj.endCharacterItems) {
                     for (const item of Object.values(obj.endCharacterItems)) {
@@ -202,6 +205,9 @@
             case 'action_type_consumable_slots_updated': {
                 // 消耗栏更新
                 let player = getPlayerData(playerId);
+                if (!player) {
+                    break;
+                }
                 player.actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
                 player.actionTypeFoodSlotsMap = obj.actionTypeFoodSlotsMap;
                 player.battleObj = buildBattleObjFromPlayer(player, false);
@@ -238,6 +244,9 @@
             }
             case 'combat_triggers_updated': {
                 let player = getPlayerData(playerId);
+                if (!player) {
+                    break;
+                }
                 if (obj.combatTriggerTypeHrid === '/combat_trigger_types/ability') {
                     // 技能栏 Trigger 更新
                     player.abilityCombatTriggersMap[obj.abilityHrid] = obj.combatTriggers;
@@ -254,6 +263,9 @@
             case 'all_combat_triggers_updated': {
                 // 所有 Triggers 更新
                 let player = getPlayerData(playerId);
+                if (!player) {
+                    break;
+                }
                 player.abilityCombatTriggersMap = { ...player.abilityCombatTriggersMap, ...obj.abilityCombatTriggersMap };
                 player.consumableCombatTriggersMap = { ...player.consumableCombatTriggersMap, ...obj.consumableCombatTriggersMap };
                 player.battleObj = buildBattleObjFromPlayer(player, false);
@@ -263,6 +275,9 @@
             case 'party_updated': {
                 // 队伍更新
                 let player = getPlayerData(playerId);
+                if (!player) {
+                    break;
+                }
                 player.partyInfo = obj.partyInfo;
                 saveCharacterData(player);
                 break;
