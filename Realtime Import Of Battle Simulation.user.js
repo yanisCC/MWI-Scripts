@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.2.1
+// @version      0.2.2
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -29,8 +29,8 @@
 (function () {
     'use strict';
 
-    const debug = console.log.bind(null, '%c[BatSync]%c', 'color:cyan', 'color:black');
-    const info = console.log.bind(null, '%c[BatSync]%c', 'color:green', 'color:black');
+    const debug = console.log.bind(null, '%c[BatSync]%c', 'color:green', 'color:black');
+    const info = console.log.bind(null, '%c[BatSync]%c', 'color:cyan', 'color:black');
     const error = console.log.bind(null, '%c[BatSync]%c', 'color:red', 'color:black');
 
     // 语言设定
@@ -45,13 +45,15 @@
 
     // 从TextDB获取数据
     async function getDataFromTextDB(key) {
-        // debug(`Get data from TextDB: ${key}`);
+        // info(`Get data from TextDB: ${key}`);
 
         const response = await new Promise((resolve) => {
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: `https://textdb.online/${key}`,
+                timeout: 5000,
                 onload: resolve,
+                ontimeout: (e) => resolve({ status: 504, error: "timeout" }),
                 onerror: (e) => resolve({ status: 500, error: e })
             })
         });
@@ -62,7 +64,7 @@
                 error: response.error
             });
         } else {
-            debug(`Get data from TextDB`, {
+            info(`Get data from TextDB`, {
                 key: key,
                 data: response.responseText
             });
@@ -73,7 +75,7 @@
 
     // 保存数据到TextDB
     async function saveDataToTextDB(key, data) {
-        // debug("保存TextDB数据", {
+        // info("保存TextDB数据", {
         //     key: key,
         //     data: data
         // });
@@ -101,7 +103,7 @@
         if (response.status !== 200) {
             error('Failed saving to TextDB:', response);
         } else {
-            debug(`Save data to TextDB success, key: ${key}`)
+            info(`Save data to TextDB success, key: ${key}`)
         }
     }
 
@@ -240,6 +242,15 @@
                 }
                 player.battleObj = battleObj;
                 saveCharacterData(player);
+                let playerUniqueKey = getPlayerUniqueKey(player.character.id);
+                info(`Player Uniquekey: `, {
+                    playerId: player.character.id,
+                    playerName: player.character.name,
+                    playerUniqueKey: playerUniqueKey,
+                    textDBUrl: `https://textdb.online/${playerUniqueKey}`
+                });
+
+                addExportButton(player.character.id);
                 break;
             }
             case 'new_battle': {
@@ -378,7 +389,7 @@
                 break;
             }
             default: {
-                // debug(obj);
+                // info(obj);
             }
         }
     }
@@ -738,6 +749,31 @@
 
     // #region Battle Simulater
 
+    // 添加个人资料导出
+    function addExportButton(characterId) {
+        const checkElem = () => {
+            const selectedElement = document.querySelector(`div.SharableProfile_overviewTab__W4dCV`);
+            if (selectedElement) {
+                clearInterval(timer);
+                const button = document.createElement("button");
+                selectedElement.appendChild(button);
+                button.textContent = isZH ? "查看云模拟数据" : "View Cloud Data";
+                button.style.borderRadius = "5px";
+                button.style.height = "30px";
+                button.style.backgroundColor = "orange";
+                button.style.color = "black";
+                button.style.boxShadow = "none";
+                button.style.border = "0px";
+                button.onclick = function () {
+                    window.open(`https://textdb.online/${getPlayerUniqueKey(characterId)}`)
+                    return false;
+                };
+                return false;
+            }
+        };
+        let timer = setInterval(checkElem, 200);
+    }
+
     // 添加实时导入按钮
     function addImportButtonForMWICombatSimulate() {
         const checkElem = () => {
@@ -807,18 +843,19 @@
 
         const BLANK_PLAYER_JSON_STR = `{\"player\":{\"attackLevel\":1,\"magicLevel\":1,\"powerLevel\":1,\"rangedLevel\":1,\"defenseLevel\":1,\"staminaLevel\":1,\"intelligenceLevel\":1,\"equipment\":[]},\"food\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"drinks\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"abilities\":[{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"}],\"triggerMap\":{},\"zone\":\"/actions/combat/fly\",\"simulationTime\":\"100\",\"houseRooms\":{\"/house_rooms/dairy_barn\":0,\"/house_rooms/garden\":0,\"/house_rooms/log_shed\":0,\"/house_rooms/forge\":0,\"/house_rooms/workshop\":0,\"/house_rooms/sewing_parlor\":0,\"/house_rooms/kitchen\":0,\"/house_rooms/brewery\":0,\"/house_rooms/laboratory\":0,\"/house_rooms/observatory\":0,\"/house_rooms/dining_room\":0,\"/house_rooms/library\":0,\"/house_rooms/dojo\":0,\"/house_rooms/gym\":0,\"/house_rooms/armory\":0,\"/house_rooms/archery_range\":0,\"/house_rooms/mystical_study\":0}}`;
 
-        const playerNames = {};
-        const imported = {};
-        const battleData = {};
+        const players = {};
         let isParty = false;
         let zone = "/actions/combat/fly";
         let isZoneDungeon = false;
 
         if (!player?.partyInfo?.partySlotMap) {
             // 个人
-            playerNames[0] = player.character.name;
-            imported[0] = true;
-            battleData[0] = player.battleObj;
+            players[0] = {
+                name: player.character.name,
+                imported: true,
+                cloudData: false,
+                battleData: JSON.stringify(player.battleObj),
+            };
             // Zone
             for (const action of player.characterActions) {
                 if (action && action.actionHrid.includes("/actions/combat/")) {
@@ -828,7 +865,6 @@
                 }
             }
         } else {
-
             // 队伍
             isParty = true;
             let i = 0;
@@ -836,13 +872,22 @@
                 i++;
                 if (member.characterID) {
                     if (member.characterID === player.character.id) {
-                        playerNames[i] = player.character.name;
-                        imported[i] = true;
-                        battleData[i] = JSON.stringify(player.battleObj);
+                        players[i] = {
+                            name: player.character.name,
+                            imported: true,
+                            cloudData: false,
+                            battleData: JSON.stringify(player.battleObj),
+                        };
                         continue;
                     } else {
                         let memberData = getPlayerData(member.characterID);
                         if (memberData && memberData.battleObj?.valid) {
+                            players[i] = {
+                                name: memberData.character.name,
+                                imported: true,
+                                cloudData: false,
+                                battleData: JSON.stringify(memberData.battleObj),
+                            };
                             if (readShareData) {
                                 // 读取共享Trigger数据
                                 let sharedTextDBStr = await getDataFromTextDB(getPlayerUniqueKey(member.characterID));
@@ -852,16 +897,18 @@
                                         ...memberData.battleObj.triggerMap,
                                         ...sharedTextDB.triggerMap
                                     }
+                                    players[i].cloudData = true;
+                                    players[i].battleData = JSON.stringify(memberData.battleObj);
                                 }
                             }
-                            playerNames[i] = memberData.character.name;
-                            imported[i] = true;
-                            battleData[i] = JSON.stringify(memberData.battleObj);
                             continue;
                         } else {
-                            playerNames[i] = isZH ? "需要点开个人资料" : "Open profile in game";
-                            imported[i] = true;
-                            battleData[i] = BLANK_PLAYER_JSON_STR;
+                            players[i] = {
+                                name: isZH ? "需要点开个人资料" : "Open profile in game",
+                                imported: true,
+                                cloudData: false,
+                                battleData: BLANK_PLAYER_JSON_STR,
+                            };
                         }
                     }
                 }
@@ -897,21 +944,34 @@
         }
 
         for (let i = 1; i <= 5; i++) {
-            if (!battleData[i]) {
-                battleData[i] = BLANK_PLAYER_JSON_STR;
-                playerNames[i] = `Player ${i}`;
-                imported[i] = false;
+            if (!players[i]) {
+                players[i] = {
+                    name: `Player ${i}`,
+                    imported: false,
+                    cloudData: false,
+                    battleData: BLANK_PLAYER_JSON_STR,
+                };
             }
-            document.querySelector(`a#player${i}-tab`).textContent = playerNames[i];
-            if (document.querySelector(`input#player${i}.form-check-input.player-checkbox`)) {
-                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).checked = imported[i];
-                document.querySelector(`input#player${i}.form-check-input.player-checkbox`).dispatchEvent(new Event("change"));
+            let aTab = document.querySelector(`a#player${i}-tab`);
+            aTab.textContent = players[i].name;
+            aTab.style.cssText = ''
+            if (players[i].cloudData) {
+                aTab.style.backgroundImage = "linear-gradient(-20deg, #00cdac 0%, #8ddad5 100%)";
+                aTab.style.color = "black";
+            }
+            let checkbox = document.querySelector(`input#player${i}.form-check-input.player-checkbox`);
+            if (checkbox) {
+                checkbox.checked = players[i].imported;
+                checkbox.dispatchEvent(new Event("change"));
             }
         }
 
         document.querySelector(`a#group-combat-tab`).click();
         const editImport = document.querySelector(`input#inputSetGroupCombatAll`);
-        editImport.value = JSON.stringify(battleData);
+        editImport.value = JSON.stringify(Object.keys(players).reduce((acc, key) => {
+            acc[key] = players[key].battleData;
+            return acc;
+        }, {}));
         document.querySelector(`button#buttonImportSet`).click();
 
         // 模拟时长
