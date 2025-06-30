@@ -825,13 +825,14 @@
 
     // 导入数据
     async function importDataForMWICombatSimulate(button, readCloudData = false) {
+        let resetZone = !firstImport;
         if (!firstImport) {
             let userConfirm = window.confirm(isZH ? "是否要覆盖当前数据" : "Do you want to overwrite the current data?");
             if (!userConfirm) {
                 return;
             }
+            firstImport = false;
         }
-        firstImport = false;
 
         let preTextContent = button.textContent;
         let preClassName = button.className;
@@ -924,7 +925,7 @@
         }
 
         // Select zone or dungeon
-        if (zone) {
+        if (resetZone && zone) {
             if (isZoneDungeon) {
                 document.querySelector(`input#simDungeonToggle`).checked = true;
                 document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
