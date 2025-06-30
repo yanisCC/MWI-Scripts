@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.2.2
+// @version      0.2.3
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -824,7 +824,7 @@
     }
 
     // 导入数据
-    async function importDataForMWICombatSimulate(button, readShareData = false) {
+    async function importDataForMWICombatSimulate(button, readCloudData = false) {
         if (!firstImport) {
             let userConfirm = window.confirm(isZH ? "是否要覆盖当前数据" : "Do you want to overwrite the current data?");
             if (!userConfirm) {
@@ -832,6 +832,7 @@
             }
         }
         firstImport = false;
+
         let preTextContent = button.textContent;
         let preClassName = button.className;
         button.textContent = isZH ? "正在导入数据..." : "Importing...";
@@ -850,7 +851,7 @@
 
         if (!player?.partyInfo?.partySlotMap) {
             // 个人
-            players[0] = {
+            players[1] = {
                 name: player.character.name,
                 imported: true,
                 cloudData: false,
@@ -878,30 +879,34 @@
                             cloudData: false,
                             battleData: JSON.stringify(player.battleObj),
                         };
-                        continue;
                     } else {
                         let memberData = getPlayerData(member.characterID);
-                        if (memberData && memberData.battleObj?.valid) {
-                            players[i] = {
-                                name: memberData.character.name,
-                                imported: true,
-                                cloudData: false,
-                                battleData: JSON.stringify(memberData.battleObj),
-                            };
-                            if (readShareData) {
-                                // 读取共享Trigger数据
-                                let sharedTextDBStr = await getDataFromTextDB(getPlayerUniqueKey(member.characterID));
-                                if (sharedTextDBStr) {
-                                    let sharedTextDB = JSON.parse(sharedTextDBStr);
+
+                        if (readCloudData) {
+                            // 读取共享Trigger数据
+                            let sharedTextDBStr = await getDataFromTextDB(getPlayerUniqueKey(member.characterID));
+                            if (sharedTextDBStr) {
+                                let sharedTextDB = JSON.parse(sharedTextDBStr);
+                                if (!memberData) {
+                                    memberData = sharedTextDB;
+                                } else if (memberData?.battleObj) {
                                     memberData.battleObj.triggerMap = {
                                         ...memberData.battleObj.triggerMap,
                                         ...sharedTextDB.triggerMap
                                     }
-                                    players[i].cloudData = true;
-                                    players[i].battleData = JSON.stringify(memberData.battleObj);
                                 }
+                            } else {
+                                readCloudData = false;
                             }
-                            continue;
+                        }
+
+                        if (memberData && memberData.battleObj?.valid) {
+                            players[i] = {
+                                name: memberData.character.name,
+                                imported: true,
+                                cloudData: readCloudData,
+                                battleData: JSON.stringify(memberData.battleObj),
+                            };
                         } else {
                             players[i] = {
                                 name: isZH ? "需要点开个人资料" : "Open profile in game",
