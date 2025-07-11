@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.2.4
+// @version      0.2.5
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -319,7 +319,13 @@
                 }
                 if (obj.endCharacterAbilities) {
                     for (const ability of obj.endCharacterAbilities) {
-                        const aIndex = equippedAbilities.findIndex(obj => obj.abilityHrid === ability.abilityHrid);
+                        // 更新技能详情
+                        const aDetail = player.characterAbilities.find(e => e.abilityHrid === ability.abilityHrid);
+                        if (aDetail) {
+                            aDetail.slotNumber = ability.slotNumber;
+                        }
+                        // 更新已装备技能信息
+                        const aIndex = equippedAbilities.findIndex(e => e.abilityHrid === ability.abilityHrid);
                         if (aIndex >= 0) {
                             equippedAbilities[aIndex] = {}
                         }
@@ -483,17 +489,10 @@
             })
         }
         if (obj.combatUnit.combatAbilities) {
-            let index = 1;
             for (const ability of obj.combatUnit.combatAbilities) {
-                if (ability && clientData.abilityDetailMap[ability.abilityHrid].isSpecialAbility) {
-                    battleObj.abilities[0] = {
-                        abilityHrid: ability.abilityHrid,
-                        level: ability.level,
-                        experience: ability.experience,
-                        availableTime: ability.updatedAt
-                    };
-                } else if (ability) {
-                    battleObj.abilities[index++] = {
+                const aDetail = obj.characterAbilities.find(e => e.abilityHrid === ability.abilityHrid);
+                if (aDetail) {
+                    battleObj.abilities[aDetail.slotNumber - 1] = {
                         abilityHrid: ability.abilityHrid,
                         level: ability.level,
                         experience: ability.experience,
@@ -926,24 +925,14 @@
         }
 
         // Select zone or dungeon
-        if (resetZone && zone) {
-            if (isZoneDungeon) {
-                document.querySelector(`input#simDungeonToggle`).checked = true;
-                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
-                const selectDungeon = document.querySelector(`select#selectDungeon`);
-                for (let i = 0; i < selectDungeon.options.length; i++) {
-                    if (selectDungeon.options[i].value === zone) {
-                        selectDungeon.options[i].selected = true;
-                        break;
-                    }
-                }
-            } else {
-                document.querySelector(`input#simDungeonToggle`).checked = false;
-                document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
-                const selectZone = document.querySelector(`select#selectZone`);
-                for (let i = 0; i < selectZone.options.length; i++) {
-                    if (selectZone.options[i].value === zone) {
-                        selectZone.options[i].selected = true;
+        if (zone) {
+            document.querySelector(`input#simDungeonToggle`).checked = isZoneDungeon;
+            document.querySelector(`input#simDungeonToggle`).dispatchEvent(new Event("change"));
+            let elementZone = isZoneDungeon ? document.querySelector(`select#selectDungeon`) : document.querySelector(`select#selectZone`);
+            if (elementZone.selectedIndex <= 0) {
+                for (let i = 0; i < elementZone.options.length; i++) {
+                    if (elementZone.options[i].value === zone) {
+                        elementZone.options[i].selected = true;
                         break;
                     }
                 }
