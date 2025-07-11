@@ -882,31 +882,32 @@
                         };
                     } else {
                         let memberData = getPlayerData(member.characterID);
+                        let battleObj = memberData?.battleObj;
 
                         if (readCloudData) {
                             // 读取共享Trigger数据
                             let sharedTextDBStr = await getDataFromTextDB(getPlayerUniqueKey(member.characterID));
                             if (sharedTextDBStr) {
                                 let sharedTextDB = JSON.parse(sharedTextDBStr);
-                                if (!memberData) {
-                                    memberData = sharedTextDB;
-                                } else if (memberData?.battleObj) {
-                                    memberData.battleObj.triggerMap = {
-                                        ...memberData.battleObj.triggerMap,
+                                if (battleObj) {
+                                    battleObj.triggerMap = {
+                                        ...battleObj.triggerMap,
                                         ...sharedTextDB.triggerMap
                                     }
+                                } else {
+                                    battleObj = sharedTextDB;
                                 }
                             } else {
                                 readCloudData = false;
                             }
                         }
 
-                        if (memberData && memberData.battleObj?.valid) {
+                        if (battleObj && battleObj.valid) {
                             players[i] = {
-                                name: memberData.character.name,
+                                name: battleObj.character.name,
                                 imported: true,
                                 cloudData: readCloudData,
-                                battleData: JSON.stringify(memberData.battleObj),
+                                battleData: JSON.stringify(battleObj),
                             };
                         } else {
                             players[i] = {
