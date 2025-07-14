@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.2.5
+// @version      0.2.6
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -824,14 +824,13 @@
 
     // 导入数据
     async function importDataForMWICombatSimulate(button, readCloudData = false) {
-        let resetZone = !firstImport;
         if (!firstImport) {
             let userConfirm = window.confirm(isZH ? "是否要覆盖当前数据" : "Do you want to overwrite the current data?");
             if (!userConfirm) {
                 return;
             }
-            firstImport = false;
         }
+        firstImport = false;
 
         let preTextContent = button.textContent;
         let preClassName = button.className;
