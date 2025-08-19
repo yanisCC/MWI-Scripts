@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.2.6
+// @version      0.3.0
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -11,6 +11,7 @@
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
 // @match        https://*/MWICombatSimulatorTest/dist/*
+// @match        https://*/MWICombatSimulatorTest/Test/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -847,6 +848,7 @@
         let isParty = false;
         let zone = "/actions/combat/fly";
         let isZoneDungeon = false;
+        let difficultyTier = 0;
 
         if (!player?.partyInfo?.partySlotMap) {
             // 个人
@@ -860,6 +862,7 @@
             for (const action of player.characterActions) {
                 if (action && action.actionHrid.includes("/actions/combat/")) {
                     zone = action.actionHrid;
+                    difficultyTier = action.difficultyTier;
                     isZoneDungeon = clientData.actionDetailMap[action.actionHrid]?.combatZoneInfo?.isDungeon;
                     break;
                 }
@@ -920,6 +923,7 @@
             }
             // Zone
             zone = player.partyInfo?.party?.actionHrid;
+            difficultyTier = player.partyInfo?.party?.difficultyTier;
             isZoneDungeon = clientData.actionDetailMap[zone]?.combatZoneInfo?.isDungeon;
         }
 
@@ -934,6 +938,17 @@
                         elementZone.options[i].selected = true;
                         break;
                     }
+                }
+            }
+        }
+        
+        // Select difficultyTier
+        let elementDifficulty = document.querySelector(`select#selectDifficulty`);
+        if (elementDifficulty.selectedIndex <= 0) {
+            for (let i = 0; i < elementDifficulty.options.length; i++) {
+                if (elementDifficulty.options[i].value == difficultyTier) {
+                    elementDifficulty.options[i].selected = true;
+                    break;
                 }
             }
         }
@@ -1030,7 +1045,7 @@
         clientData.abilityDetailMap = obj.abilityDetailMap;
     }
 
-    if (document.URL.includes("/MWICombatSimulatorTest/dist")) {
+    if (document.URL.includes("/MWICombatSimulatorTest/dist") || document.URL.includes("/MWICombatSimulatorTest/Test")) {
         addImportButtonForMWICombatSimulate();
         observeResultsForMWICombatSimulate();
     }
