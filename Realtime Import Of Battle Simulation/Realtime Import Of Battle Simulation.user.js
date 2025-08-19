@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.3.1
+// @version      0.3.2
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -424,8 +424,8 @@
                     battleObj.player.intelligenceLevel = skill.level;
                 } else if (skill.skillHrid.includes("attack")) {
                     battleObj.player.attackLevel = skill.level;
-                } else if (skill.skillHrid.includes("power")) {
-                    battleObj.player.powerLevel = skill.level;
+                } else if (skill.skillHrid.includes("melee")) {
+                    battleObj.player.meleeLevel = skill.level;
                 } else if (skill.skillHrid.includes("defense")) {
                     battleObj.player.defenseLevel = skill.level;
                 } else if (skill.skillHrid.includes("ranged")) {
@@ -532,8 +532,8 @@
                 battleObj.player.intelligenceLevel = skill.level;
             } else if (skill.skillHrid.includes("attack")) {
                 battleObj.player.attackLevel = skill.level;
-            } else if (skill.skillHrid.includes("power")) {
-                battleObj.player.powerLevel = skill.level;
+            } else if (skill.skillHrid.includes("melee")) {
+                battleObj.player.meleeLevel = skill.level;
             } else if (skill.skillHrid.includes("defense")) {
                 battleObj.player.defenseLevel = skill.level;
             } else if (skill.skillHrid.includes("ranged")) {
@@ -685,7 +685,7 @@
         battleObj.player.staminaLevel = battleObj.player.staminaLevel ?? 1;
         battleObj.player.intelligenceLevel = battleObj.player.intelligenceLevel ?? 1;
         battleObj.player.attackLevel = battleObj.player.attackLevel ?? 1;
-        battleObj.player.powerLevel = battleObj.player.powerLevel ?? 1;
+        battleObj.player.meleeLevel = battleObj.player.meleeLevel ?? 1;
         battleObj.player.defenseLevel = battleObj.player.defenseLevel ?? 1;
         battleObj.player.rangedLevel = battleObj.player.rangedLevel ?? 1;
         battleObj.player.magicLevel = battleObj.player.magicLevel ?? 1;
@@ -841,7 +841,7 @@
         clientData = getInitClientData();
         let player = getCurrentPlayerData();
 
-        const BLANK_PLAYER_JSON_STR = `{\"player\":{\"attackLevel\":1,\"magicLevel\":1,\"powerLevel\":1,\"rangedLevel\":1,\"defenseLevel\":1,\"staminaLevel\":1,\"intelligenceLevel\":1,\"equipment\":[]},\"food\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"drinks\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"abilities\":[{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"}],\"triggerMap\":{},\"zone\":\"/actions/combat/fly\",\"simulationTime\":\"100\",\"houseRooms\":{\"/house_rooms/dairy_barn\":0,\"/house_rooms/garden\":0,\"/house_rooms/log_shed\":0,\"/house_rooms/forge\":0,\"/house_rooms/workshop\":0,\"/house_rooms/sewing_parlor\":0,\"/house_rooms/kitchen\":0,\"/house_rooms/brewery\":0,\"/house_rooms/laboratory\":0,\"/house_rooms/observatory\":0,\"/house_rooms/dining_room\":0,\"/house_rooms/library\":0,\"/house_rooms/dojo\":0,\"/house_rooms/gym\":0,\"/house_rooms/armory\":0,\"/house_rooms/archery_range\":0,\"/house_rooms/mystical_study\":0}}`;
+        const BLANK_PLAYER_JSON_STR = `{\"player\":{\"attackLevel\":1,\"meleeLevel\":1,\"magicLevel\":1,\"rangedLevel\":1,\"defenseLevel\":1,\"staminaLevel\":1,\"intelligenceLevel\":1,\"equipment\":[]},\"food\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"drinks\":{\"/action_types/combat\":[{\"itemHrid\":\"\"},{\"itemHrid\":\"\"},{\"itemHrid\":\"\"}]},\"abilities\":[{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"},{\"abilityHrid\":\"\",\"level\":\"1\"}],\"triggerMap\":{},\"zone\":\"/actions/combat/fly\",\"simulationTime\":\"100\",\"houseRooms\":{\"/house_rooms/dairy_barn\":0,\"/house_rooms/garden\":0,\"/house_rooms/log_shed\":0,\"/house_rooms/forge\":0,\"/house_rooms/workshop\":0,\"/house_rooms/sewing_parlor\":0,\"/house_rooms/kitchen\":0,\"/house_rooms/brewery\":0,\"/house_rooms/laboratory\":0,\"/house_rooms/observatory\":0,\"/house_rooms/dining_room\":0,\"/house_rooms/library\":0,\"/house_rooms/dojo\":0,\"/house_rooms/gym\":0,\"/house_rooms/armory\":0,\"/house_rooms/archery_range\":0,\"/house_rooms/mystical_study\":0}}`;
 
         const players = {};
         let isParty = false;
