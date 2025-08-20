@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.3.2
+// @version      0.3.3
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -313,29 +313,26 @@
             case 'abilities_updated': {
                 // 技能更新
                 let player = getPlayerData(playerId);
-                let equippedAbilities = JSON.parse(JSON.stringify(player.combatUnit.combatAbilities));
+                let equippedAbilities = [];
                 for (let i = equippedAbilities.length; i < 5; i++) {
                     equippedAbilities.push({})
                 }
                 if (obj.endCharacterAbilities) {
+                    // 更新技能详情
                     for (const ability of obj.endCharacterAbilities) {
-                        // 更新技能详情
                         const aDetail = player.characterAbilities.find(e => e.abilityHrid === ability.abilityHrid);
                         if (aDetail) {
                             aDetail.slotNumber = ability.slotNumber;
                         }
-                        // 更新已装备技能信息
-                        const aIndex = equippedAbilities.findIndex(e => e.abilityHrid === ability.abilityHrid);
-                        if (aIndex >= 0) {
-                            equippedAbilities[aIndex] = {}
-                        }
-                        if (ability.slotNumber > 0) {
-                            equippedAbilities.splice(ability.slotNumber - 1, 0, {
-                                abilityHrid: ability.abilityHrid,
-                                level: ability.level,
-                                experience: ability.experience,
-                                availableTime: ability.updatedAt
-                            })
+                    }
+                    // 更新技能列表
+                    const slotAbilities = player.characterAbilities.filter(e => e.slotNumber > 0);
+                    for (const ability of slotAbilities) {
+                        equippedAbilities[ability.slotNumber - 1] = {
+                            abilityHrid: ability.abilityHrid,
+                            level: ability.level,
+                            experience: ability.experience,
+                            availableTime: ability.updatedAt
                         }
                     }
                 }
@@ -940,7 +937,7 @@
                 }
             }
         }
-        
+
         // Select difficultyTier
         let elementDifficulty = document.querySelector(`select#selectDifficulty`);
         if (elementDifficulty.selectedIndex <= 0) {
