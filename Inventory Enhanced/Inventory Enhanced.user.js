@@ -113,7 +113,7 @@
         `;
 
         const title = document.createElement('h3');
-        title.textContent = '分类管理';
+        title.textContent = '管理物品分类页签';
         title.style.cssText = 'margin: 0 0 15px 0; text-align: center;';
 
         // 添加共享配置开关
@@ -595,22 +595,31 @@
     }
 
     // 创建管理分类按钮
-    function createCategoryManagementButton() {
-        if (document.getElementById('MWI_IE_Category_Management_Div')) return;
+    function createCategoryManagementButton(itemsGrid) {
+        if (!itemsGrid) return;
 
-        const itemsInventoryContainer = document.querySelector('.MainPanel_mainPanel__Ex2Ir .Inventory_items__6SXv0');
-        if (!itemsInventoryContainer) return;
+        if (itemsGrid.parentElement.querySelector('.MWI_IE_Category_Management_Div')) return;
+
+        // const itemsContainer
+        // let itemFilter = document.querySelector('.MainPanel_mainPanel__Ex2Ir .Inventory_itemGrid__20YAH');
+        // if (!itemFilter) {
+        //     itemFilter = document.querySelector('.Inventory_inventory__17CH2 .Inventory_itemGrid__20YAH');
+        //     if (!itemFilter) return;
+        // }
+
+        // const itemsInventoryContainer = itemsGrid.querySelector('.Inventory_items__6SXv0');
+        // if (!itemsInventoryContainer) return;
 
         const managementDiv = document.createElement('div');
-        managementDiv.id = 'MWI_IE_Category_Management_Div';
+        managementDiv.className = 'MWI_IE_Category_Management_Div';
         managementDiv.style.cssText = `
             text-align: left;
         `;
-        itemsInventoryContainer.parentElement.insertBefore(managementDiv, itemsInventoryContainer);
+        itemsGrid.parentElement.insertBefore(managementDiv, itemsGrid.parentElement.firstChild);
 
         const managementButton = document.createElement('button');
         managementButton.id = 'MWI_IE_Category_Management_Btn';
-        managementButton.textContent = '管理分类';
+        managementButton.textContent = '管理物品分类页签';
         managementButton.style.cssText = `
             padding: 8px 16px;
             background: var(--color-primary);
@@ -647,7 +656,7 @@
 
         const categoryButton = document.createElement('button');
         categoryButton.className = 'Button_button__1Fe9z Button_fullWidth__17pVU MWI_IE_Category_Btn';
-        categoryButton.textContent = '分类管理';
+        categoryButton.textContent = '物品分类';
 
         categoryButton.addEventListener('click', function () {
             const itemName = menuContainer.querySelector('.Item_name__2C42x').textContent.trim();
@@ -823,7 +832,14 @@
             // 仓库页面检测
             const inventoryContainer = document.querySelector('.Inventory_items__6SXv0');
             if (inventoryContainer) {
-                createCategoryManagementButton();
+                let itemFilter = document.querySelector('.GamePage_middlePanel__uDts7 .Inventory_itemGrid__20YAH');
+                if (itemFilter) {
+                    createCategoryManagementButton(itemFilter);
+                }
+                itemFilter = document.querySelector('.GamePage_characterManagementPanel__3OYQL .Inventory_itemGrid__20YAH');
+                if (itemFilter) {
+                    createCategoryManagementButton(itemFilter);
+                }
                 createCustomCategories();
             }
 
