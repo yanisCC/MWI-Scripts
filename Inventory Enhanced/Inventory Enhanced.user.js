@@ -481,7 +481,7 @@
                                                 const spanText = span.textContent.trim();
                                                 // 排除自定义分组，查找原始分组
                                                 return spanText !== group.name &&
-                                                       !span.closest('[id^="MWI_IE_Custom_Group-"]');
+                                                    !span.closest('[id^="MWI_IE_Custom_Group-"]');
                                             });
 
                                         if (originalGroupSpan) {
@@ -584,80 +584,67 @@
 
         const groups = loadCustomGroups();
         const groupItems = loadGroupItems();
-
         // 反向遍历分组数组以保持正确的显示顺序
         for (let i = groups.length - 1; i >= 0; i--) {
             const group = groups[i];
+            let customGroup = inventoryContainer.querySelector(`#MWI_IE_Custom_Group-${group.id}`);
 
             // 收集属于此分组的物品
             const groupItemsList = [];
             Object.keys(groupItems).forEach(itemName => {
-                if (groupItems[itemName].includes(group.id)) {
+                if (groupItems[itemName] && groupItems[itemName].includes(group.id)) {
                     const inventoryItemSvg = document.querySelector(`.Inventory_items__6SXv0 .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
                     if (inventoryItemSvg) {
                         // 获取原始物品容器
                         const originalItemContainer = inventoryItemSvg.closest('.Item_itemContainer__x7kH1');
                         if (originalItemContainer) {
-                            // 直接使用原始DOM元素，不进行克隆
+                            if (!originalItemContainer._originalItemGrid) {
+                                originalItemContainer._originalItemGrid = originalItemContainer.closest('.Inventory_itemGrid__20YAH');
+                            }
+                            // // 检查物品是否已经在正确的分组中
+                            // const currentParent = originalItemContainer.closest('[id^="MWI_IE_Custom_Group-"]');
+                            // if (!currentParent || currentParent.id !== `MWI_IE_Custom_Group-${group.id}`) {
+                            // }
                             groupItemsList.push(originalItemContainer);
                         }
                     }
                 }
             });
 
-            const customGroup = inventoryContainer.querySelector(`#MWI_IE_Custom_Group-${group.id}`);
-            // 如果没有道具，处理隐藏逻辑
+            // 如果没有道具，保持分组显示但为空
             if (groupItemsList.length === 0) {
-                // 如果分组已存在但没有道具，隐藏它
                 if (customGroup) {
                     customGroup.style.display = 'none';
                 }
                 continue;
             }
 
-            // 如果分组已存在且有道具，显示它并更新内容
-            if (customGroup) {
+            if (!customGroup) {
+                // 创建新分组
+                customGroup = document.createElement('div');
+                customGroup.id = `MWI_IE_Custom_Group-${group.id}`;
+                customGroup.innerHTML = `
+                     <div class="Inventory_itemGrid__20YAH">
+                         <div class="Inventory_label__XEOAx">
+                             <span class="Inventory_categoryButton__35s1x" style="cursor: pointer;">${group.name}</span>
+                         </div>
+                     </div>
+                 `;
+
+                // 将自定义分组添加到仓库的最前面
+                inventoryContainer.insertBefore(customGroup, inventoryContainer.firstChild);
+            } else {
+                // 如果分组已存在且有道具，显示它并更新内容
                 customGroup.style.display = 'block';
-                const existingGrid = customGroup.querySelector('.Inventory_itemGrid__20YAH');
-                if (existingGrid) {
-                    // 参考优化：检查物品是否已存在，避免重复添加
-                    groupItemsList.forEach(item => {
-                        existingGrid.appendChild(item);
-                    });
-                }
-                continue;
             }
 
-            // 创建新分组
-            const groupContainer = document.createElement('div');
-            groupContainer.id = `MWI_IE_Custom_Group-${group.id}`;
-
-            const itemGridHTML = `
-                 <div class="Inventory_itemGrid__20YAH">
-                     <div class="Inventory_label__XEOAx">
-                         <span class="Inventory_categoryButton__35s1x" style="cursor: pointer;">${group.name}</span>
-                     </div>
-                 </div>
-             `;
-            groupContainer.innerHTML = itemGridHTML;
-
-            // 将自定义分组添加到仓库的最前面
-            inventoryContainer.insertBefore(groupContainer, inventoryContainer.firstChild);
-
             // 添加属于此分组的物品
-            const groupGrid = groupContainer.querySelector('.Inventory_itemGrid__20YAH');
+            const groupGrid = customGroup.querySelector('.Inventory_itemGrid__20YAH');
             const groupButton = groupGrid.querySelector('.Inventory_categoryButton__35s1x');
 
-            // 参考优化：检查物品是否已存在，避免重复添加
+            // 移动物品到新分组
             groupItemsList.forEach(item => {
-                const itemSvg = item.querySelector('svg');
-                if (itemSvg) {
-                    const itemName = itemSvg.getAttribute('aria-label');
-                    const existingItem = groupGrid.querySelector(`svg[aria-label="${itemName}"]`);
-                    if (!existingItem) {
-                        groupGrid.appendChild(item);
-                    }
-                }
+                groupGrid.appendChild(item);
             });
 
             // 添加折叠功能
@@ -850,11 +837,24 @@
             // 点击切换选择状态（单选模式）
             groupItem.addEventListener('click', () => {
                 const itemGroups = loadGroupItems();
-                const isCurrentlySelected = currentItemGroups.includes(group.id);
+                // 重新获取当前物品的分组状态，确保数据一致性
+                const updatedCurrentItemGroups = itemGroups[itemName] || [];
+                const isCurrentlySelected = updatedCurrentItemGroups.includes(group.id);
 
                 if (isCurrentlySelected) {
                     // 如果当前分组已选中，则取消选择
-                    delete itemGroups[itemName];
+                    // 将物品从当前分组移除，但保留空数组以便后续处理
+                    itemGroups[itemName] = [];
+
+                    // 手动将物品移回原始位置
+                    const inventoryItem = document.querySelector(`.Inventory_items__6SXv0 .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
+                    if (inventoryItem) {
+                        const itemContainer = inventoryItem.closest('.Item_itemContainer__x7kH1');
+                        if (itemContainer) {
+                            const originalItemGrid = itemContainer._originalItemGrid;
+                            originalItemGrid.appendChild(itemContainer);
+                        }
+                    }
 
                     // 更新UI：重置所有分组项的样式
                     groupsList.querySelectorAll('div').forEach(item => {
@@ -888,9 +888,16 @@
                     label.style.fontWeight = 'bold';
                 }
 
+                // 清理空数组
+                Object.keys(itemGroups).forEach(key => {
+                    if (itemGroups[key].length === 0) {
+                        delete itemGroups[key];
+                    }
+                });
+
                 saveItemGroups(itemGroups);
 
-                // 刷新分组显示
+                // 立即刷新分组显示
                 refreshInventoryGroups();
             });
         });
@@ -940,12 +947,17 @@
      * 移除所有现有的自定义分组并重新创建
      */
     function refreshInventoryGroups() {
+        console.log('开始刷新仓库分组显示');
+
         // 移除所有自定义分组
         const customGroups = document.querySelectorAll('[id^="MWI_IE_Custom_Group-"]');
+        console.log('找到自定义分组数量:', customGroups.length);
         customGroups.forEach(group => group.remove());
 
         // 重新创建自定义分组
         createCustomGroups();
+
+        console.log('仓库分组显示刷新完成');
     }
 
     /**
@@ -982,9 +994,14 @@
      * 设置MutationObserver监听DOM变化
      * 当页面DOM发生变化时自动刷新功能
      */
+    let refreshTimeout;
     const config = { attributes: true, childList: true, subtree: true };
     const observer = new MutationObserver(function (mutationsList, observer) {
-        refresh();
+        // 防抖处理，避免频繁刷新
+        clearTimeout(refreshTimeout);
+        refreshTimeout = setTimeout(() => {
+            refresh();
+        }, 100);
     });
     observer.observe(document, config);
 
