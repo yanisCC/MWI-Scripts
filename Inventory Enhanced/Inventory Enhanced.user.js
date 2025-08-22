@@ -3,25 +3,73 @@
 // @name:zh-CN   [银河奶牛]仓库增强
 // @namespace    http://tampermonkey.net/
 // @version      00.1.0
-// @description  Enhanced inventory management with custom categories for MWI
-// @description:zh-CN  银河奶牛仓库增强 - 自定义物品分类管理
+// @description  // TODO
+// @description:zh-CN  提供自定义物品分组功能，支持分组管理、物品分类和折叠显示
 // @icon         https://www.milkywayidle.com/favicon.svg
 // @author       Yannis
 // @license      CC-BY-NC-SA-4.0
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
 // @match        https://*/MWICombatSimulatorTest/*
-// @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @connect      textdb.online
-// @require      https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    // 获取当前角色名
+    // 存储键值常量配置
+    const STORAGE_KEYS = {
+        // 主存储键
+        MAIN_STORAGE_KEY: 'mwi_inventory_enhanced_data',
+        // 数据字段名
+        FIELDS: {
+            SHARED_CONFIG_ENABLED: 'shared_config_enabled',
+            GROUPS: 'groups',
+            ITEM_GROUPS: 'item_groups'
+        },
+        // 用户标识
+        USER_TYPES: {
+            SHARED: 'shared'
+        }
+    };
+
+    /**
+     * 获取完整的存储数据
+     * @returns {Object} 完整的存储数据对象
+     */
+    function getAllStorageData() {
+        const data = localStorage.getItem(STORAGE_KEYS.MAIN_STORAGE_KEY);
+        if (!data) {
+            // 初始化默认数据结构
+            setAllStorageData({});
+            return {};
+        }
+        return JSON.parse(data);
+    }
+
+    /**
+     * 保存完整的存储数据
+     * @param {Object} data - 要保存的完整数据对象
+     */
+    function setAllStorageData(data) {
+        localStorage.setItem(STORAGE_KEYS.MAIN_STORAGE_KEY, JSON.stringify(data));
+    }
+
+    /**
+     * 获取用户标识
+     * @param {boolean} isShared - 是否为共享配置
+     * @param {string} characterName - 角色名（可选）
+     * @returns {string} 用户标识
+     */
+    function getUserKey(isShared = false, characterName = null) {
+        return isShared ? STORAGE_KEYS.USER_TYPES.SHARED : (characterName || getCharacterName());
+    }
+
+    /**
+     * 获取当前角色名
+     * @returns {string|null} 角色名称，如果未找到则返回null
+     */
     function getCharacterName() {
         const headerInfo = document.querySelector('.Header_info__26fkk');
         if (!headerInfo) return null;
@@ -29,64 +77,107 @@
         return nameElement ? nameElement.textContent.trim() : null;
     }
 
-    // 获取存储键名
-    function getStorageKey(type) {
-        const characterName = getCharacterName();
-        if (!characterName) return null;
-        return `mw_${type}_${characterName}`;
-    }
-
-    // 检查是否启用共享配置
+    /**
+     * 检查是否启用共享配置
+     * @returns {boolean} 是否启用共享配置
+     */
     function isSharedConfigEnabled() {
-        return localStorage.getItem('mwi_shared_config_enabled') === 'true';
+        const data = getAllStorageData();
+        return data[STORAGE_KEYS.FIELDS.SHARED_CONFIG_ENABLED] === true;
     }
 
-    // 设置共享配置状态
+    /**
+     * 设置共享配置状态
+     * @param {boolean} enabled - 是否启用共享配置
+     */
     function setSharedConfigEnabled(enabled) {
-        localStorage.setItem('mwi_shared_config_enabled', enabled.toString());
+        const data = getAllStorageData();
+        data[STORAGE_KEYS.FIELDS.SHARED_CONFIG_ENABLED] = enabled;
+        setAllStorageData(data);
     }
 
-    // 加载自定义分类
-    function loadCustomCategories() {
+    /**
+     * 加载自定义分组
+     * @returns {Array} 自定义分组数组
+     */
+    function loadCustomGroups() {
         const isShared = isSharedConfigEnabled();
-        const storageKey = isShared ? 'mwi_custom_categories_shared' : getStorageKey('categories');
-        if (!storageKey) return [];
-        return JSON.parse(localStorage.getItem(storageKey)) || [];
+        const data = getAllStorageData();
+        const userKey = getUserKey(isShared);
+
+        // 确保groups字段存在
+        if (!data[STORAGE_KEYS.FIELDS.GROUPS]) {
+            data[STORAGE_KEYS.FIELDS.GROUPS] = {};
+        }
+
+        return data[STORAGE_KEYS.FIELDS.GROUPS][userKey] || [];
     }
 
-    // 保存自定义分类
-    function saveCustomCategories(categories) {
+    /**
+     * 保存自定义分组
+     * @param {Array} groups - 分组数组
+     */
+    function saveCustomGroups(groups) {
         const isShared = isSharedConfigEnabled();
-        const storageKey = isShared ? 'mwi_custom_categories_shared' : getStorageKey('categories');
-        if (!storageKey) return;
-        localStorage.setItem(storageKey, JSON.stringify(categories));
+        const data = getAllStorageData();
+        const userKey = getUserKey(isShared);
+
+        // 确保groups字段存在
+        if (!data[STORAGE_KEYS.FIELDS.GROUPS]) {
+            data[STORAGE_KEYS.FIELDS.GROUPS] = {};
+        }
+
+        data[STORAGE_KEYS.FIELDS.GROUPS][userKey] = groups;
+        setAllStorageData(data);
     }
 
-    // 加载物品分类关联
-    function loadItemCategories() {
+    /**
+     * 加载物品分组关联
+     * @returns {Object} 物品分组关联对象，键为物品名，值为分组ID数组
+     */
+    function loadGroupItems() {
         const isShared = isSharedConfigEnabled();
-        const storageKey = isShared ? 'mwi_item_categories_shared' : getStorageKey('item_categories');
-        if (!storageKey) return {};
-        return JSON.parse(localStorage.getItem(storageKey)) || {};
+        const data = getAllStorageData();
+        const userKey = getUserKey(isShared);
+
+        // 确保item_groups字段存在
+        if (!data[STORAGE_KEYS.FIELDS.ITEM_GROUPS]) {
+            data[STORAGE_KEYS.FIELDS.ITEM_GROUPS] = {};
+        }
+
+        return data[STORAGE_KEYS.FIELDS.ITEM_GROUPS][userKey] || {};
     }
 
-    // 保存物品分类关联
-    function saveItemCategories(itemCategories) {
+    /**
+     * 保存物品分组关联
+     * @param {Object} itemGroups - 物品分组关联对象
+     */
+    function saveItemGroups(itemGroups) {
         const isShared = isSharedConfigEnabled();
-        const storageKey = isShared ? 'mwi_item_categories_shared' : getStorageKey('item_categories');
-        if (!storageKey) return;
-        localStorage.setItem(storageKey, JSON.stringify(itemCategories));
+        const data = getAllStorageData();
+        const userKey = getUserKey(isShared);
+
+        // 确保item_groups字段存在
+        if (!data[STORAGE_KEYS.FIELDS.ITEM_GROUPS]) {
+            data[STORAGE_KEYS.FIELDS.ITEM_GROUPS] = {};
+        }
+
+        data[STORAGE_KEYS.FIELDS.ITEM_GROUPS][userKey] = itemGroups;
+        setAllStorageData(data);
     }
 
-    // 创建分类管理界面
-    function createCategoryManagementUI() {
+    /**
+     * 创建分组管理界面
+     * 显示一个模态对话框，允许用户管理自定义分组
+     */
+    function createGroupManagementUI() {
         // 检查是否已存在管理界面
-        if (document.querySelector('#MWI_IE_Category_Management_UIPannel')) {
+        if (document.querySelector('#MWI_IE_Group_Management_UIPannel')) {
             return;
         }
 
         const overlay = document.createElement('div');
-        overlay.id = 'MWI_IE_Category_Management_UIPannel';
+        overlay.id = 'MWI_IE_Group_Management_UIPannel';
 
         overlay.style.cssText = `
             position: fixed;
@@ -113,7 +204,7 @@
         `;
 
         const title = document.createElement('h3');
-        title.textContent = '管理物品分类页签';
+        title.textContent = '管理物品分组页签';
         title.style.cssText = 'margin: 0 0 15px 0; text-align: center;';
 
         // 添加共享配置开关
@@ -170,24 +261,24 @@
             // 刷新分类列表以反映新的配置状态
             setTimeout(() => {
                 overlay.remove();
-                createCategoryManagementUI();
-                refreshInventoryCategories();
+                createGroupManagementUI();
+                refreshInventoryGroups();
             }, 100);
         });
 
         sharedConfigContainer.appendChild(sharedConfigLabel);
         sharedConfigContainer.appendChild(sharedConfigToggle);
 
-        const categoriesList = document.createElement('div');
-        categoriesList.id = 'MWI_IE_Categoriesist';
+        const groupsList = document.createElement('div');
+        groupsList.id = 'MWI_IE_Groupsist';
 
-        const addCategoryContainer = document.createElement('div');
-        addCategoryContainer.style.cssText = 'margin: 15px 0; display: flex; gap: 10px;';
+        const addGroupContainer = document.createElement('div');
+        addGroupContainer.style.cssText = 'margin: 15px 0; display: flex; gap: 10px;';
 
-        const newCategoryInput = document.createElement('input');
-        newCategoryInput.type = 'text';
-        newCategoryInput.placeholder = '输入新分类名称';
-        newCategoryInput.style.cssText = `
+        const newGroupInput = document.createElement('input');
+        newGroupInput.type = 'text';
+        newGroupInput.placeholder = '输入新分组名称';
+        newGroupInput.style.cssText = `
             flex: 1;
             padding: 8px;
             border: 1px solid #555;
@@ -220,16 +311,19 @@
             margin-top: 15px;
         `;
 
-        // 渲染分类列表
-        function renderCategories() {
-            const categories = loadCustomCategories();
-            categoriesList.innerHTML = '';
+        /**
+         * 渲染分组列表
+         * 在管理界面中显示所有自定义分组
+         */
+        function renderGroups() {
+            const groups = loadCustomGroups();
+            groupsList.innerHTML = '';
 
-            categories.forEach((category, index) => {
-                const categoryItem = document.createElement('div');
-                categoryItem.draggable = true;
-                categoryItem.dataset.categoryIndex = index;
-                categoryItem.style.cssText = `
+            groups.forEach((group, index) => {
+                const groupItem = document.createElement('div');
+                groupItem.draggable = true;
+                groupItem.dataset.groupIndex = index;
+                groupItem.style.cssText = `
                     display: flex;
                     align-items: center;
                     gap: 10px;
@@ -243,17 +337,17 @@
                 `;
 
                 // 添加拖拽事件监听器
-                categoryItem.addEventListener('dragstart', (e) => {
+                groupItem.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('text/plain', index);
-                    categoryItem.style.opacity = '0.5';
-                    categoryItem.classList.add('dragging');
+                    groupItem.style.opacity = '0.5';
+                    groupItem.classList.add('dragging');
                 });
 
-                categoryItem.addEventListener('dragend', () => {
-                    categoryItem.style.opacity = '1';
-                    categoryItem.classList.remove('dragging');
+                groupItem.addEventListener('dragend', () => {
+                    groupItem.style.opacity = '1';
+                    groupItem.classList.remove('dragging');
                     // 清除所有其他项的动画效果
-                    const allItems = categoriesList.querySelectorAll('[data-category-index]');
+                    const allItems = groupsList.querySelectorAll('[data-group-index]');
                     allItems.forEach(item => {
                         item.style.transform = 'translateY(0)';
                         item.style.borderColor = '#555';
@@ -261,22 +355,22 @@
                     });
                 });
 
-                categoryItem.addEventListener('dragover', (e) => {
+                groupItem.addEventListener('dragover', (e) => {
                     e.preventDefault();
-                    if (categoryItem.classList.contains('dragging')) return;
+                    if (groupItem.classList.contains('dragging')) return;
 
                     const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                    const targetIndex = parseInt(categoryItem.dataset.categoryIndex);
+                    const targetIndex = parseInt(groupItem.dataset.groupIndex);
 
                     // 高亮当前目标
-                    categoryItem.style.borderColor = 'var(--color-primary)';
-                    categoryItem.style.background = 'rgba(74, 158, 255, 0.1)';
-                    categoryItem.classList.add('drop-target');
+                    groupItem.style.borderColor = 'var(--color-primary)';
+                    groupItem.style.background = 'rgba(74, 158, 255, 0.1)';
+                    groupItem.classList.add('drop-target');
 
                     // 为其他项添加滑动效果
-                    const allItems = categoriesList.querySelectorAll('[data-category-index]');
+                    const allItems = groupsList.querySelectorAll('[data-group-index]');
                     allItems.forEach(item => {
-                        const itemIndex = parseInt(item.dataset.categoryIndex);
+                        const itemIndex = parseInt(item.dataset.groupIndex);
                         if (item.classList.contains('dragging')) return;
 
                         if (draggedIndex < targetIndex && itemIndex > draggedIndex && itemIndex <= targetIndex) {
@@ -291,31 +385,31 @@
                     });
                 });
 
-                categoryItem.addEventListener('dragleave', (e) => {
+                groupItem.addEventListener('dragleave', (e) => {
                     // 检查是否真的离开了元素
-                    if (!categoryItem.contains(e.relatedTarget)) {
-                        categoryItem.style.borderColor = '#555';
-                        categoryItem.style.background = 'transparent';
-                        categoryItem.classList.remove('drop-target');
+                    if (!groupItem.contains(e.relatedTarget)) {
+                        groupItem.style.borderColor = '#555';
+                        groupItem.style.background = 'transparent';
+                        groupItem.classList.remove('drop-target');
                     }
                 });
 
-                categoryItem.addEventListener('drop', (e) => {
+                groupItem.addEventListener('drop', (e) => {
                     e.preventDefault();
                     const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                    const targetIndex = parseInt(categoryItem.dataset.categoryIndex);
+                    const targetIndex = parseInt(groupItem.dataset.groupIndex);
 
                     if (draggedIndex !== targetIndex) {
-                        const categories = loadCustomCategories();
-                        const draggedItem = categories.splice(draggedIndex, 1)[0];
-                        categories.splice(targetIndex, 0, draggedItem);
-                        saveCustomCategories(categories);
-                        renderCategories();
-                        refreshInventoryCategories();
+                        const groups = loadCustomGroups();
+                        const draggedItem = groups.splice(draggedIndex, 1)[0];
+                        groups.splice(targetIndex, 0, draggedItem);
+                        saveCustomGroups(groups);
+                        renderGroups();
+                        refreshInventoryGroups();
                     }
 
                     // 清除所有动画效果
-                    const allItems = categoriesList.querySelectorAll('[data-category-index]');
+                    const allItems = groupsList.querySelectorAll('[data-group-index]');
                     allItems.forEach(item => {
                         item.style.transform = 'translateY(0)';
                         item.style.borderColor = '#555';
@@ -325,7 +419,7 @@
                 });
 
                 const nameSpan = document.createElement('span');
-                nameSpan.textContent = category.name;
+                nameSpan.textContent = group.name;
                 nameSpan.style.flex = '1';
 
                 const renameButton = document.createElement('button');
@@ -354,64 +448,103 @@
 
                 // 重命名事件
                 renameButton.addEventListener('click', () => {
-                    const newName = prompt('输入新的分类名称:', category.name);
-                    if (newName && newName.trim() && newName !== category.name) {
-                        const categories = loadCustomCategories();
-                        categories[index].name = newName.trim();
-                        saveCustomCategories(categories);
-                        renderCategories();
-                        refreshInventoryCategories();
+                    const newName = prompt('输入新的分组名称:', group.name);
+                    if (newName && newName.trim() && newName !== group.name) {
+                        const groups = loadCustomGroups();
+                        groups[index].name = newName.trim();
+                        saveCustomGroups(groups);
+                        renderGroups();
+                        refreshInventoryGroups();
                     }
                 });
 
                 // 删除事件
                 deleteButton.addEventListener('click', () => {
-                    if (confirm(`确定要删除分类 "${category.name}" 吗？`)) {
-                        const categories = loadCustomCategories();
-                        categories.splice(index, 1);
-                        saveCustomCategories(categories);
+                    if (confirm(`确定要删除分组 "${group.name}" 吗？`)) {
+                        // 先将属于该分组的物品移动回原始位置
+                        const itemGroups = loadGroupItems();
+                        const customGroupContainer = document.querySelector(`#MWI_IE_Custom_Group-${group.id}`);
+
+                        if (customGroupContainer) {
+                            const groupGrid = customGroupContainer.querySelector('.Inventory_itemGrid__20YAH');
+                            if (groupGrid) {
+                                const items = groupGrid.querySelectorAll('.Item_itemContainer__x7kH1');
+                                items.forEach(item => {
+                                    // 获取物品名称
+                                    const itemSvg = item.querySelector('svg[aria-label]');
+                                    if (itemSvg) {
+                                        const itemName = itemSvg.getAttribute('aria-label');
+
+                                        // 查找原始分组并移动物品
+                                        const originalGroupSpan = [...document.querySelectorAll('.Inventory_categoryButton__35s1x')]
+                                            .find(span => {
+                                                const spanText = span.textContent.trim();
+                                                // 排除自定义分组，查找原始分组
+                                                return spanText !== group.name &&
+                                                       !span.closest('[id^="MWI_IE_Custom_Group-"]');
+                                            });
+
+                                        if (originalGroupSpan) {
+                                            const originalGroupGrid = originalGroupSpan.closest('.Inventory_itemGrid__20YAH');
+                                            if (originalGroupGrid) {
+                                                originalGroupGrid.appendChild(item);
+                                            }
+                                        } else {
+                                            // 如果找不到原始分组，移动到第一个非自定义分组
+                                            const firstOriginalGroup = document.querySelector('.Inventory_items__6SXv0 > div:not([id^="MWI_IE_Custom_Group-"]) .Inventory_itemGrid__20YAH');
+                                            if (firstOriginalGroup) {
+                                                firstOriginalGroup.appendChild(item);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+
+                        const groups = loadCustomGroups();
+                        groups.splice(index, 1);
+                        saveCustomGroups(groups);
 
                         // 清理物品关联
-                        const itemCategories = loadItemCategories();
-                        Object.keys(itemCategories).forEach(itemName => {
-                            itemCategories[itemName] = itemCategories[itemName].filter(catId => catId !== category.id);
-                            if (itemCategories[itemName].length === 0) {
-                                delete itemCategories[itemName];
+                        Object.keys(itemGroups).forEach(itemName => {
+                            itemGroups[itemName] = itemGroups[itemName].filter(groupId => groupId !== group.id);
+                            if (itemGroups[itemName].length === 0) {
+                                delete itemGroups[itemName];
                             }
                         });
-                        saveItemCategories(itemCategories);
+                        saveItemGroups(itemGroups);
 
-                        renderCategories();
-                        refreshInventoryCategories();
+                        renderGroups();
+                        refreshInventoryGroups();
                     }
                 });
 
-                categoryItem.appendChild(nameSpan);
-                categoryItem.appendChild(renameButton);
-                categoryItem.appendChild(deleteButton);
-                categoriesList.appendChild(categoryItem);
+                groupItem.appendChild(nameSpan);
+                groupItem.appendChild(renameButton);
+                groupItem.appendChild(deleteButton);
+                groupsList.appendChild(groupItem);
             });
         }
 
-        // 添加分类事件
+        // 添加分组事件
         addButton.addEventListener('click', () => {
-            const name = newCategoryInput.value.trim();
+            const name = newGroupInput.value.trim();
             if (name) {
-                const categories = loadCustomCategories();
-                const newCategory = {
+                const groups = loadCustomGroups();
+                const newGroup = {
                     id: Date.now().toString(),
                     name: name
                 };
-                categories.push(newCategory);
-                saveCustomCategories(categories);
-                newCategoryInput.value = '';
-                renderCategories();
-                refreshInventoryCategories();
+                groups.push(newGroup);
+                saveCustomGroups(groups);
+                newGroupInput.value = '';
+                renderGroups();
+                refreshInventoryGroups();
             }
         });
 
-        // 回车添加分类
-        newCategoryInput.addEventListener('keypress', (e) => {
+        // 回车添加分组
+        newGroupInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 addButton.click();
             }
@@ -430,175 +563,135 @@
 
         modal.appendChild(title);
         modal.appendChild(sharedConfigContainer);
-        modal.appendChild(addCategoryContainer);
-        modal.appendChild(categoriesList);
-        addCategoryContainer.appendChild(newCategoryInput);
-        addCategoryContainer.appendChild(addButton);
+        modal.appendChild(addGroupContainer);
+        modal.appendChild(groupsList);
+        addGroupContainer.appendChild(newGroupInput);
+        addGroupContainer.appendChild(addButton);
         modal.appendChild(closeButton);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        renderCategories();
+        renderGroups();
     }
 
-    // 创建自定义分类页签
-    function createCustomCategories() {
+    /**
+     * 创建自定义分组页签
+     * 在仓库界面中创建和显示自定义分组
+     */
+    function createCustomGroups() {
         const inventoryContainer = document.querySelector('.Inventory_items__6SXv0');
         if (!inventoryContainer) return;
 
-        const categories = loadCustomCategories();
-        const itemCategories = loadItemCategories();
+        const groups = loadCustomGroups();
+        const groupItems = loadGroupItems();
 
-        // 反向遍历分类数组以保持正确的显示顺序
-        for (let i = categories.length - 1; i >= 0; i--) {
-            const category = categories[i];
-            const existingCategory = inventoryContainer.querySelector(`#MWI_IE_Custom_Category-${category.id}`);
-            if (existingCategory) {
-                continue;
-            }
+        // 反向遍历分组数组以保持正确的显示顺序
+        for (let i = groups.length - 1; i >= 0; i--) {
+            const group = groups[i];
 
-            // 收集属于此分类的物品
-            const categoryItems = [];
-            Object.keys(itemCategories).forEach(itemName => {
-                if (itemCategories[itemName].includes(category.id)) {
-                    const inventoryItem = document.querySelector(`.Inventory_items__6SXv0 .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
-                    if (inventoryItem) {
-                        const itemContainer = inventoryItem.closest('.Item_itemContainer__x7kH1');
-                        if (itemContainer) {
-                            const clonedItem = itemContainer.cloneNode(true);
-
-                            // 复制所有事件监听器的更有效方法
-                            // 为克隆的物品添加点击事件，直接触发原始物品的点击
-                            clonedItem.addEventListener('click', (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // 直接点击原始物品
-                                itemContainer.click();
-                            });
-
-                            // 为克隆的物品添加右键菜单事件
-                            clonedItem.addEventListener('contextmenu', (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // 在原始物品位置触发右键菜单
-                                const rect = itemContainer.getBoundingClientRect();
-                                const contextEvent = new MouseEvent('contextmenu', {
-                                    bubbles: true,
-                                    cancelable: true,
-                                    clientX: rect.left + rect.width / 2,
-                                    clientY: rect.top + rect.height / 2,
-                                    button: 2
-                                });
-                                itemContainer.dispatchEvent(contextEvent);
-                            });
-
-                            // 为克隆的物品添加鼠标悬停事件
-                            clonedItem.addEventListener('mouseenter', (e) => {
-                                // 触发原始物品的鼠标悬停
-                                const mouseEnterEvent = new MouseEvent('mouseenter', {
-                                    bubbles: true,
-                                    cancelable: true
-                                });
-                                itemContainer.dispatchEvent(mouseEnterEvent);
-                            });
-
-                            clonedItem.addEventListener('mouseleave', (e) => {
-                                // 触发原始物品的鼠标离开
-                                const mouseLeaveEvent = new MouseEvent('mouseleave', {
-                                    bubbles: true,
-                                    cancelable: true
-                                });
-                                itemContainer.dispatchEvent(mouseLeaveEvent);
-                            });
-
-                            // 复制原始物品的所有属性
-                            clonedItem.setAttribute('data-original-item', itemContainer.getAttribute('data-item-id') || itemName);
-
-                            categoryItems.push(clonedItem);
+            // 收集属于此分组的物品
+            const groupItemsList = [];
+            Object.keys(groupItems).forEach(itemName => {
+                if (groupItems[itemName].includes(group.id)) {
+                    const inventoryItemSvg = document.querySelector(`.Inventory_items__6SXv0 .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
+                    if (inventoryItemSvg) {
+                        // 获取原始物品容器
+                        const originalItemContainer = inventoryItemSvg.closest('.Item_itemContainer__x7kH1');
+                        if (originalItemContainer) {
+                            // 直接使用原始DOM元素，不进行克隆
+                            groupItemsList.push(originalItemContainer);
                         }
                     }
                 }
             });
 
+            const customGroup = inventoryContainer.querySelector(`#MWI_IE_Custom_Group-${group.id}`);
             // 如果没有道具，处理隐藏逻辑
-            if (categoryItems.length === 0) {
-                // 如果分类已存在但没有道具，隐藏它
-                if (existingCategory) {
-                    existingCategory.style.display = 'none';
+            if (groupItemsList.length === 0) {
+                // 如果分组已存在但没有道具，隐藏它
+                if (customGroup) {
+                    customGroup.style.display = 'none';
                 }
                 continue;
             }
 
-            // 如果分类已存在且有道具，显示它并更新内容
-            if (existingCategory) {
-                existingCategory.style.display = 'block';
-                // 清空现有内容并重新添加物品
-                const existingGrid = existingCategory.querySelector('.Inventory_itemGrid__20YAH');
+            // 如果分组已存在且有道具，显示它并更新内容
+            if (customGroup) {
+                customGroup.style.display = 'block';
+                const existingGrid = customGroup.querySelector('.Inventory_itemGrid__20YAH');
                 if (existingGrid) {
-                    // 保留分类标题，清空物品
-                    const items = existingGrid.querySelectorAll('.Item_itemContainer__x7kH1');
-                    items.forEach(item => item.remove());
-                    // 添加新的物品
-                    categoryItems.forEach(item => {
+                    // 参考优化：检查物品是否已存在，避免重复添加
+                    groupItemsList.forEach(item => {
                         existingGrid.appendChild(item);
                     });
                 }
                 continue;
             }
 
-            // 创建新分类
-            const categoryContainer = document.createElement('div');
-            categoryContainer.id = `MWI_IE_Custom_Category-${category.id}`;
+            // 创建新分组
+            const groupContainer = document.createElement('div');
+            groupContainer.id = `MWI_IE_Custom_Group-${group.id}`;
 
             const itemGridHTML = `
                  <div class="Inventory_itemGrid__20YAH">
                      <div class="Inventory_label__XEOAx">
-                         <span class="Inventory_categoryButton__35s1x" style="cursor: pointer;">${category.name}</span>
+                         <span class="Inventory_categoryButton__35s1x" style="cursor: pointer;">${group.name}</span>
                      </div>
                  </div>
              `;
-            categoryContainer.innerHTML = itemGridHTML;
+            groupContainer.innerHTML = itemGridHTML;
 
-            // 将自定义分类添加到仓库的最前面
-            inventoryContainer.insertBefore(categoryContainer, inventoryContainer.firstChild);
+            // 将自定义分组添加到仓库的最前面
+            inventoryContainer.insertBefore(groupContainer, inventoryContainer.firstChild);
 
-            // 添加属于此分类的物品
-            const categoryGrid = categoryContainer.querySelector('.Inventory_itemGrid__20YAH');
-            const categoryButton = categoryGrid.querySelector('.Inventory_categoryButton__35s1x');
+            // 添加属于此分组的物品
+            const groupGrid = groupContainer.querySelector('.Inventory_itemGrid__20YAH');
+            const groupButton = groupGrid.querySelector('.Inventory_categoryButton__35s1x');
 
-            // 创建物品图标
-            categoryItems.forEach(item => {
-                categoryGrid.appendChild(item);
+            // 参考优化：检查物品是否已存在，避免重复添加
+            groupItemsList.forEach(item => {
+                const itemSvg = item.querySelector('svg');
+                if (itemSvg) {
+                    const itemName = itemSvg.getAttribute('aria-label');
+                    const existingItem = groupGrid.querySelector(`svg[aria-label="${itemName}"]`);
+                    if (!existingItem) {
+                        groupGrid.appendChild(item);
+                    }
+                }
             });
 
             // 添加折叠功能
             let isCollapsed = false;
-            categoryButton.addEventListener('click', () => {
+            groupButton.addEventListener('click', () => {
                 isCollapsed = !isCollapsed;
                 if (isCollapsed) {
-                    // 折叠：删除所有物品HTML标签
-                    categoryItems.forEach(item => {
-                        if (item.parentNode === categoryGrid) {
-                            categoryGrid.removeChild(item);
-                        }
+                    // 折叠：隐藏当前分组中的所有物品
+                    const currentItems = groupGrid.querySelectorAll('.Item_itemContainer__x7kH1');
+                    currentItems.forEach(item => {
+                        item.style.display = 'none';
                     });
-                    categoryButton.textContent = `+ ${category.name} (${categoryItems.length})`;
+                    groupButton.textContent = `+ ${group.name} (${currentItems.length})`;
                 } else {
-                    // 展开：重新添加所有物品HTML标签
-                    categoryItems.forEach(item => {
-                        categoryGrid.appendChild(item);
+                    // 展开：显示当前分组中的所有物品
+                    const currentItems = groupGrid.querySelectorAll('.Item_itemContainer__x7kH1');
+                    currentItems.forEach(item => {
+                        item.style.display = 'block';
                     });
-                    categoryButton.textContent = `${category.name}`;
+                    groupButton.textContent = `${group.name}`;
                 }
             });
         }
     }
 
-    // 创建管理分类按钮
-    function createCategoryManagementButton(itemsGrid) {
+    /**
+     * 创建管理分组按钮
+     * 在仓库界面中添加管理分组的按钮
+     * @param {HTMLElement} itemsGrid - 物品网格容器
+     */
+    function createGroupManagementButton(itemsGrid) {
         if (!itemsGrid) return;
 
-        if (itemsGrid.parentElement.querySelector('.MWI_IE_Category_Management_Div')) return;
+        if (itemsGrid.parentElement.querySelector('.MWI_IE_Group_Management_Div')) return;
 
         // const itemsContainer
         // let itemFilter = document.querySelector('.MainPanel_mainPanel__Ex2Ir .Inventory_itemGrid__20YAH');
@@ -611,15 +704,15 @@
         // if (!itemsInventoryContainer) return;
 
         const managementDiv = document.createElement('div');
-        managementDiv.className = 'MWI_IE_Category_Management_Div';
+        managementDiv.className = 'MWI_IE_Group_Management_Div';
         managementDiv.style.cssText = `
             text-align: left;
         `;
         itemsGrid.parentElement.insertBefore(managementDiv, itemsGrid.parentElement.firstChild);
 
         const managementButton = document.createElement('button');
-        managementButton.id = 'MWI_IE_Category_Management_Btn';
-        managementButton.textContent = '管理物品分类页签';
+        managementButton.id = 'MWI_IE_Group_Management_Btn';
+        managementButton.textContent = '管理物品分组页签';
         managementButton.style.cssText = `
             padding: 8px 16px;
             background: var(--color-primary);
@@ -644,35 +737,43 @@
             managementButton.style.background = 'var(--color-primary)';
         });
 
-        managementButton.addEventListener('click', createCategoryManagementUI);
+        managementButton.addEventListener('click', createGroupManagementUI);
         managementDiv.appendChild(managementButton);
     }
 
-    // 添加物品分类按钮
-    function addItemCategoryButton(menuContainer) {
-        // 检查是否已存在分类按钮
-        const existingButton = menuContainer.querySelector('.MWI_IE_Category_Btn');
+    /**
+     * 添加物品分组按钮
+     * 在物品右键菜单中添加分组按钮
+     * @param {HTMLElement} menuContainer - 菜单容器
+     */
+    function addItemGroupButton(menuContainer) {
+        // 检查是否已存在分组按钮
+        const existingButton = menuContainer.querySelector('.MWI_IE_Group_Btn');
         if (existingButton) return;
 
-        const categoryButton = document.createElement('button');
-        categoryButton.className = 'Button_button__1Fe9z Button_fullWidth__17pVU MWI_IE_Category_Btn';
-        categoryButton.textContent = '物品分类';
+        const groupButton = document.createElement('button');
+        groupButton.className = 'Button_button__1Fe9z Button_fullWidth__17pVU MWI_IE_Group_Btn';
+        groupButton.textContent = '物品分组';
 
-        categoryButton.addEventListener('click', function () {
+        groupButton.addEventListener('click', function () {
             const itemName = menuContainer.querySelector('.Item_name__2C42x').textContent.trim();
-            showItemCategoryDialog(itemName);
+            showItemGroupDialog(itemName);
         });
 
-        menuContainer.appendChild(categoryButton);
+        menuContainer.appendChild(groupButton);
     }
 
-    // 显示物品分类对话框
-    function showItemCategoryDialog(itemName) {
+    /**
+     * 显示物品分组对话框
+     * 显示一个对话框，允许用户为指定物品选择分组
+     * @param {string} itemName - 物品名称
+     */
+    function showItemGroupDialog(itemName) {
         // 检查是否已存在对话框
-        if (document.querySelector('#MWI_IE_Item_Category_Dialog')) return;
+        if (document.querySelector('#MWI_IE_Item_Group_Dialog')) return;
 
         const overlay = document.createElement('div');
-        overlay.id = 'MWI_IE_Item_Category_Dialog';
+        overlay.id = 'MWI_IE_Item_Group_Dialog';
         overlay.style.cssText = `
             position: fixed;
             top: 0;
@@ -698,19 +799,19 @@
         `;
 
         const title = document.createElement('h3');
-        title.textContent = `物品分类: ${itemName}`;
+        title.textContent = `物品分组: ${itemName}`;
         title.style.cssText = 'margin: 0 0 15px 0; text-align: center; font-size: 16px;';
 
-        const categoriesList = document.createElement('div');
-        const categories = loadCustomCategories();
-        const itemCategories = loadItemCategories();
-        const currentItemCategories = itemCategories[itemName] || [];
+        const groupsList = document.createElement('div');
+        const groups = loadCustomGroups();
+        const itemGroups = loadGroupItems();
+        const currentItemGroups = itemGroups[itemName] || [];
 
-        categories.forEach(category => {
-            const categoryItem = document.createElement('div');
-            const isSelected = currentItemCategories.includes(category.id);
+        groups.forEach(group => {
+            const groupItem = document.createElement('div');
+            const isSelected = currentItemGroups.includes(group.id);
 
-            categoryItem.style.cssText = `
+            groupItem.style.cssText = `
                   display: flex;
                   align-items: center;
                   gap: 10px;
@@ -724,55 +825,73 @@
               `;
 
             // 添加hover效果
-            categoryItem.addEventListener('mouseenter', () => {
-                if (!currentItemCategories.includes(category.id)) {
-                    categoryItem.style.background = 'rgba(74, 158, 255, 0.3)';
+            groupItem.addEventListener('mouseenter', () => {
+                if (!currentItemGroups.includes(group.id)) {
+                    groupItem.style.background = 'rgba(74, 158, 255, 0.3)';
                 }
             });
-            categoryItem.addEventListener('mouseleave', () => {
-                if (!currentItemCategories.includes(category.id)) {
-                    categoryItem.style.background = isSelected ? 'var(--color-primary)' : 'transparent';
+            groupItem.addEventListener('mouseleave', () => {
+                if (!currentItemGroups.includes(group.id)) {
+                    groupItem.style.background = isSelected ? 'var(--color-primary)' : 'transparent';
                 }
             });
 
             const label = document.createElement('span');
-            label.textContent = category.name;
+            label.textContent = group.name;
             label.style.cssText = `
                  flex: 1;
                  color: ${isSelected ? 'var(--color-text-dark-mode)' : 'white'};
                  font-weight: ${isSelected ? 'bold' : 'normal'};
              `;
 
-            categoryItem.appendChild(label);
-            categoriesList.appendChild(categoryItem);
+            groupItem.appendChild(label);
+            groupsList.appendChild(groupItem);
 
-            // 点击切换选择状态
-            categoryItem.addEventListener('click', () => {
-                const itemCategories = loadItemCategories();
-                if (!itemCategories[itemName]) {
-                    itemCategories[itemName] = [];
-                }
-
-                const isCurrentlySelected = itemCategories[itemName].includes(category.id);
+            // 点击切换选择状态（单选模式）
+            groupItem.addEventListener('click', () => {
+                const itemGroups = loadGroupItems();
+                const isCurrentlySelected = currentItemGroups.includes(group.id);
 
                 if (isCurrentlySelected) {
-                     itemCategories[itemName] = itemCategories[itemName].filter(id => id !== category.id);
-                     if (itemCategories[itemName].length === 0) {
-                         delete itemCategories[itemName];
-                     }
-                     categoryItem.style.background = 'transparent';
-                     categoryItem.style.border = '1px solid #555';
-                     label.style.color = 'white';
-                     label.style.fontWeight = 'normal';
-                 } else {
-                     itemCategories[itemName].push(category.id);
-                     categoryItem.style.background = 'var(--color-primary)';
-                     categoryItem.style.border = '2px solid white';
-                     label.style.color = 'var(--color-text-dark-mode)';
-                     label.style.fontWeight = 'bold';
-                 }
+                    // 如果当前分组已选中，则取消选择
+                    delete itemGroups[itemName];
 
-                saveItemCategories(itemCategories);
+                    // 更新UI：重置所有分组项的样式
+                    groupsList.querySelectorAll('div').forEach(item => {
+                        const itemLabel = item.querySelector('span');
+                        item.style.background = 'transparent';
+                        item.style.border = '1px solid #555';
+                        if (itemLabel) {
+                            itemLabel.style.color = 'white';
+                            itemLabel.style.fontWeight = 'normal';
+                        }
+                    });
+                } else {
+                    // 单选模式：清除所有其他选择，只选择当前分组
+                    itemGroups[itemName] = [group.id];
+
+                    // 更新UI：重置所有分组项的样式
+                    groupsList.querySelectorAll('div').forEach(item => {
+                        const itemLabel = item.querySelector('span');
+                        item.style.background = 'transparent';
+                        item.style.border = '1px solid #555';
+                        if (itemLabel) {
+                            itemLabel.style.color = 'white';
+                            itemLabel.style.fontWeight = 'normal';
+                        }
+                    });
+
+                    // 设置当前选中项的样式
+                    groupItem.style.background = 'var(--color-primary)';
+                    groupItem.style.border = '2px solid white';
+                    label.style.color = 'var(--color-text-dark-mode)';
+                    label.style.fontWeight = 'bold';
+                }
+
+                saveItemGroups(itemGroups);
+
+                // 刷新分组显示
+                refreshInventoryGroups();
             });
         });
 
@@ -799,34 +918,40 @@
         });
         closeButton.addEventListener('click', () => {
             overlay.remove();
-            refreshInventoryCategories();
+            refreshInventoryGroups();
         });
 
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
                 overlay.remove();
-                refreshInventoryCategories();
+                refreshInventoryGroups();
             }
         });
 
         modal.appendChild(title);
-        modal.appendChild(categoriesList);
+        modal.appendChild(groupsList);
         modal.appendChild(closeButton);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
     }
 
-    // 刷新仓库分类显示
-    function refreshInventoryCategories() {
-        // 移除所有自定义分类
-        const customCategories = document.querySelectorAll('[id^="MWI_IE_Custom_Category-"]');
-        customCategories.forEach(cat => cat.remove());
+    /**
+     * 刷新仓库分组显示
+     * 移除所有现有的自定义分组并重新创建
+     */
+    function refreshInventoryGroups() {
+        // 移除所有自定义分组
+        const customGroups = document.querySelectorAll('[id^="MWI_IE_Custom_Group-"]');
+        customGroups.forEach(group => group.remove());
 
-        // 重新创建自定义分类
-        createCustomCategories();
+        // 重新创建自定义分组
+        createCustomGroups();
     }
 
-    // 主刷新函数
+    /**
+     * 主刷新函数
+     * 检测页面状态并初始化相应的功能
+     */
     function refresh() {
         try {
             // 仓库页面检测
@@ -834,33 +959,39 @@
             if (inventoryContainer) {
                 let itemFilter = document.querySelector('.GamePage_middlePanel__uDts7 .Inventory_itemGrid__20YAH');
                 if (itemFilter) {
-                    createCategoryManagementButton(itemFilter);
+                    createGroupManagementButton(itemFilter);
                 }
                 itemFilter = document.querySelector('.GamePage_characterManagementPanel__3OYQL .Inventory_itemGrid__20YAH');
                 if (itemFilter) {
-                    createCategoryManagementButton(itemFilter);
+                    createGroupManagementButton(itemFilter);
                 }
-                createCustomCategories();
+                createCustomGroups();
             }
 
             // 检查是否出现物品菜单
             const itemMenu = document.querySelector('.Item_actionMenu__2yUcG');
             if (itemMenu) {
-                addItemCategoryButton(itemMenu);
+                addItemGroupButton(itemMenu);
             }
         } catch (error) {
             console.log('刷新函数出错:', error);
         }
     }
 
-    // 设置MutationObserver监听DOM变化
+    /**
+     * 设置MutationObserver监听DOM变化
+     * 当页面DOM发生变化时自动刷新功能
+     */
     const config = { attributes: true, childList: true, subtree: true };
     const observer = new MutationObserver(function (mutationsList, observer) {
         refresh();
     });
     observer.observe(document, config);
 
-    // 页面加载完成后执行一次
+    /**
+     * 页面加载完成后执行一次初始化
+     * 确保在页面完全加载后启动功能
+     */
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', refresh);
     } else {
