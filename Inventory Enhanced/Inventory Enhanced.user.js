@@ -593,7 +593,7 @@
             const groupItemsList = [];
             Object.keys(groupItems).forEach(itemName => {
                 if (groupItems[itemName] && groupItems[itemName].includes(group.id)) {
-                    const inventoryItemSvg = document.querySelector(`.Inventory_items__6SXv0 .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
+                    const inventoryItemSvg = document.querySelector(`.Inventory_items__6SXv0 div:not([id^="MWI_IE_Custom_Group-"]) .Item_itemContainer__x7kH1 svg[aria-label="${itemName}"]`);
                     if (inventoryItemSvg) {
                         // 获取原始物品容器
                         const originalItemContainer = inventoryItemSvg.closest('.Item_itemContainer__x7kH1');
@@ -601,10 +601,6 @@
                             if (!originalItemContainer._originalItemGrid) {
                                 originalItemContainer._originalItemGrid = originalItemContainer.closest('.Inventory_itemGrid__20YAH');
                             }
-                            // // 检查物品是否已经在正确的分组中
-                            // const currentParent = originalItemContainer.closest('[id^="MWI_IE_Custom_Group-"]');
-                            // if (!currentParent || currentParent.id !== `MWI_IE_Custom_Group-${group.id}`) {
-                            // }
                             groupItemsList.push(originalItemContainer);
                         }
                     }
@@ -631,6 +627,28 @@
                      </div>
                  `;
 
+                const groupButton = customGroup.querySelector('.Inventory_categoryButton__35s1x');
+                // 添加折叠功能
+                let isCollapsed = false;
+                groupButton.addEventListener('click', () => {
+                    isCollapsed = !isCollapsed;
+                    if (isCollapsed) {
+                        // 折叠：隐藏当前分组中的所有物品
+                        const currentItems = customGroup.querySelectorAll('.Item_itemContainer__x7kH1');
+                        currentItems.forEach(item => {
+                            item.style.display = 'none';
+                        });
+                        groupButton.textContent = `+ ${group.name} (${currentItems.length})`;
+                    } else {
+                        // 展开：显示当前分组中的所有物品
+                        const currentItems = customGroup.querySelectorAll('.Item_itemContainer__x7kH1');
+                        currentItems.forEach(item => {
+                            item.style.display = 'block';
+                        });
+                        groupButton.textContent = `${group.name}`;
+                    }
+                });
+
                 // 将自定义分组添加到仓库的最前面
                 inventoryContainer.insertBefore(customGroup, inventoryContainer.firstChild);
             } else {
@@ -640,31 +658,13 @@
 
             // 添加属于此分组的物品
             const groupGrid = customGroup.querySelector('.Inventory_itemGrid__20YAH');
-            const groupButton = groupGrid.querySelector('.Inventory_categoryButton__35s1x');
 
             // 移动物品到新分组
             groupItemsList.forEach(item => {
-                groupGrid.appendChild(item);
-            });
-
-            // 添加折叠功能
-            let isCollapsed = false;
-            groupButton.addEventListener('click', () => {
-                isCollapsed = !isCollapsed;
-                if (isCollapsed) {
-                    // 折叠：隐藏当前分组中的所有物品
-                    const currentItems = groupGrid.querySelectorAll('.Item_itemContainer__x7kH1');
-                    currentItems.forEach(item => {
-                        item.style.display = 'none';
-                    });
-                    groupButton.textContent = `+ ${group.name} (${currentItems.length})`;
-                } else {
-                    // 展开：显示当前分组中的所有物品
-                    const currentItems = groupGrid.querySelectorAll('.Item_itemContainer__x7kH1');
-                    currentItems.forEach(item => {
-                        item.style.display = 'block';
-                    });
-                    groupButton.textContent = `${group.name}`;
+                // 检查物品是否已经在正确的分组中
+                const currentParent = item.closest('[id^="MWI_IE_Custom_Group-"]');
+                if (!currentParent || currentParent.id !== `MWI_IE_Custom_Group-${group.id}`) {
+                    groupGrid.appendChild(item);
                 }
             });
         }
@@ -950,9 +950,9 @@
         console.log('开始刷新仓库分组显示');
 
         // 移除所有自定义分组
-        const customGroups = document.querySelectorAll('[id^="MWI_IE_Custom_Group-"]');
-        console.log('找到自定义分组数量:', customGroups.length);
-        customGroups.forEach(group => group.remove());
+        // const customGroups = document.querySelectorAll('[id^="MWI_IE_Custom_Group-"]');
+        // console.log('找到自定义分组数量:', customGroups.length);
+        // customGroups.forEach(group => group.remove());
 
         // 重新创建自定义分组
         createCustomGroups();
@@ -997,11 +997,12 @@
     let refreshTimeout;
     const config = { attributes: true, childList: true, subtree: true };
     const observer = new MutationObserver(function (mutationsList, observer) {
+        refresh();
         // 防抖处理，避免频繁刷新
-        clearTimeout(refreshTimeout);
-        refreshTimeout = setTimeout(() => {
-            refresh();
-        }, 100);
+        // clearTimeout(refreshTimeout);
+        // refreshTimeout = setTimeout(() => {
+
+        // }, 100);
     });
     observer.observe(document, config);
 
