@@ -2,7 +2,7 @@
 // @name         [MWI] Inventory Enhanced
 // @name:zh-CN   [银河奶牛]仓库增强
 // @namespace    http://tampermonkey.net/
-// @version      00.1.0
+// @version      0.1.0
 // @description  // TODO
 // @description:zh-CN  提供自定义物品分组功能，支持分组管理、物品分类和折叠显示
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -10,7 +10,6 @@
 // @license      CC-BY-NC-SA-4.0
 // @match        https://www.milkywayidle.com/*
 // @match        https://test.milkywayidle.com/*
-// @match        https://*/MWICombatSimulatorTest/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // ==/UserScript==
@@ -747,7 +746,7 @@
             showItemGroupDialog(itemName);
         });
 
-        menuContainer.appendChild(groupButton);
+        menuContainer.insertBefore(groupButton, menuContainer.firstChild);
     }
 
     /**
