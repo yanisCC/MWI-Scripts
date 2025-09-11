@@ -746,7 +746,8 @@
             showItemGroupDialog(itemName);
         });
 
-        menuContainer.insertBefore(groupButton, menuContainer.firstChild);
+        menuContainer.appendChild(groupButton);
+        //menuContainer.insertBefore(groupButton, menuContainer.firstChild);
     }
 
     /**
