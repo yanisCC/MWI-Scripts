@@ -770,13 +770,64 @@
         let timer = setInterval(checkElem, 200);
     }
 
+    function refreshLoadoutOptions(selectBox, loadouts) {
+        if (!selectBox) {
+            return;
+        }
+        selectBox.options.length = 0;
+
+        let defaultOption = document.createElement("option");
+        defaultOption.textContent = isZH ? "选择游戏内配装" : "Select Game Loadout";
+        defaultOption.selected = true;
+        defaultOption.disabled = true;
+        defaultOption.hidden = true;
+        selectBox.appendChild(defaultOption);
+        if (loadouts) {
+            for (const loadout of loadouts) {
+                selectBox.options.add(new Option(loadout.name, loadout.id));
+                let option = document.createElement("option");
+                option.textContent = loadout.name;
+                option.value = loadout.id;
+            }
+        }
+    }
+
     // 添加实时导入按钮
     function addImportButtonForMWICombatSimulate() {
         const checkElem = () => {
+            clearInterval(timer);
+
+            const equipCol = document.querySelector(`.container-fluid`)?.querySelector(`.col-md-5`);
+            if (equipCol) {
+                let loadoutDiv = document.createElement("div");
+                loadoutDiv.className = "row mb-3";
+                equipCol.insertBefore(loadoutDiv, equipCol.firstChild);
+
+                // 配装导入按钮selectBox
+                let selectBoxDiv = document.createElement("div");
+                loadoutDiv.appendChild(selectBoxDiv);
+                selectBoxDiv.className = "col-md-6";
+
+                let selectBox = document.createElement("select");
+                selectBoxDiv.appendChild(selectBox);
+                selectBox.id = "selectLoadout"
+                selectBox.className = "form-select";
+                refreshLoadoutOptions(selectBox);
+
+                let selectBoxBtn = document.createElement("button");
+                loadoutDiv.appendChild(selectBoxBtn);
+                selectBoxBtn.textContent = isZH ? "使用配装" : "Use Loadout";
+                selectBoxBtn.className = "btn btn-warning";
+                selectBoxBtn.style = `width: 120px`;
+                selectBoxBtn.onclick = function () {
+                };
+                // characterLoadoutMap
+
+                document.querySelector(`.container-fluid`)
+            }
+
             const btnEquipSets = document.querySelector(`button#buttonEquipmentSets`);
             if (btnEquipSets) {
-                clearInterval(timer);
-
                 let divRow = document.createElement("div");
                 divRow.className = "row";
                 btnEquipSets.parentElement.parentElement.prepend(divRow);
