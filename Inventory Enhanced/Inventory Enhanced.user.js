@@ -739,7 +739,7 @@
         if (existingButton) return;
 
         const groupButton = document.createElement('button');
-        groupButton.className = 'Button_button__1Fe9z Button_fullWidth__17pVU MWI_IE_Group_Btn';
+        groupButton.className = 'Button_button__1Fe9z Button_success__6d6kU Button_fullWidth__17pVU MWI_IE_Group_Btn';
         groupButton.textContent = '物品分组';
 
         groupButton.addEventListener('click', function () {
@@ -813,15 +813,50 @@
 
             // 添加hover效果
             groupItem.addEventListener('mouseenter', () => {
-                if (!currentItemGroups.includes(group.id)) {
+                const itemGroups = loadGroupItems();
+                const updatedCurrentItemGroups = itemGroups[itemName] || [];
+                if (!updatedCurrentItemGroups.includes(group.id)) {
                     groupItem.style.background = 'rgba(74, 158, 255, 0.3)';
                 }
             });
             groupItem.addEventListener('mouseleave', () => {
-                if (!currentItemGroups.includes(group.id)) {
-                    groupItem.style.background = isSelected ? 'var(--color-primary)' : 'transparent';
+                const itemGroups = loadGroupItems();
+                const updatedCurrentItemGroups = itemGroups[itemName] || [];
+                const isCurrentlySelected = updatedCurrentItemGroups.includes(group.id);
+                if (!isCurrentlySelected) {
+                    groupItem.style.background = 'transparent';
+                } else {
+                    groupItem.style.background = 'var(--color-primary)';
                 }
             });
+
+            // 创建复选框样式的单选框
+            const checkbox = document.createElement('div');
+            checkbox.style.cssText = `
+                width: 16px;
+                height: 16px;
+                border: 2px solid ${isSelected ? 'white' : '#888'};
+                border-radius: 3px;
+                background: ${isSelected ? 'var(--color-primary)' : 'transparent'};
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                transition: all 0.2s;
+            `;
+
+            // 添加对勾符号
+            if (isSelected) {
+                const checkmark = document.createElement('span');
+                checkmark.innerHTML = '✓';
+                checkmark.style.cssText = `
+                    color: white;
+                    font-size: 12px;
+                    font-weight: bold;
+                    line-height: 1;
+                `;
+                checkbox.appendChild(checkmark);
+            }
 
             const label = document.createElement('span');
             label.textContent = group.name;
@@ -831,6 +866,7 @@
                  font-weight: ${isSelected ? 'bold' : 'normal'};
              `;
 
+            groupItem.appendChild(checkbox);
             groupItem.appendChild(label);
             groupsList.appendChild(groupItem);
 
@@ -858,9 +894,15 @@
 
                     // 更新UI：重置所有分组项的样式
                     groupsList.querySelectorAll('div').forEach(item => {
-                        const itemLabel = item.querySelector('span');
+                        const itemCheckbox = item.querySelector('div');
+                        const itemLabel = item.querySelector('span:last-child');
                         item.style.background = 'transparent';
                         item.style.border = '1px solid #555';
+                        if (itemCheckbox) {
+                            itemCheckbox.style.border = '2px solid #888';
+                            itemCheckbox.style.background = 'transparent';
+                            itemCheckbox.innerHTML = ''; // 清除对勾
+                        }
                         if (itemLabel) {
                             itemLabel.style.color = 'white';
                             itemLabel.style.fontWeight = 'normal';
@@ -872,9 +914,15 @@
 
                     // 更新UI：重置所有分组项的样式
                     groupsList.querySelectorAll('div').forEach(item => {
-                        const itemLabel = item.querySelector('span');
+                        const itemCheckbox = item.querySelector('div');
+                        const itemLabel = item.querySelector('span:last-child');
                         item.style.background = 'transparent';
                         item.style.border = '1px solid #555';
+                        if (itemCheckbox) {
+                            itemCheckbox.style.border = '2px solid #888';
+                            itemCheckbox.style.background = 'transparent';
+                            itemCheckbox.innerHTML = ''; // 清除对勾
+                        }
                         if (itemLabel) {
                             itemLabel.style.color = 'white';
                             itemLabel.style.fontWeight = 'normal';
@@ -886,6 +934,20 @@
                     groupItem.style.border = '2px solid white';
                     label.style.color = 'var(--color-text-dark-mode)';
                     label.style.fontWeight = 'bold';
+
+                    // 更新复选框样式
+                    checkbox.style.border = '2px solid white';
+                    checkbox.style.background = 'var(--color-primary)';
+                    const checkmark = document.createElement('span');
+                    checkmark.innerHTML = '✓';
+                    checkmark.style.cssText = `
+                        color: white;
+                        font-size: 12px;
+                        font-weight: bold;
+                        line-height: 1;
+                    `;
+                    checkbox.innerHTML = '';
+                    checkbox.appendChild(checkmark);
                 }
 
                 // 清理空数组
@@ -994,15 +1056,9 @@
      * 设置MutationObserver监听DOM变化
      * 当页面DOM发生变化时自动刷新功能
      */
-    let refreshTimeout;
     const config = { attributes: true, childList: true, subtree: true };
     const observer = new MutationObserver(function (mutationsList, observer) {
         refresh();
-        // 防抖处理，避免频繁刷新
-        // clearTimeout(refreshTimeout);
-        // refreshTimeout = setTimeout(() => {
-
-        // }, 100);
     });
     observer.observe(document, config);
 
