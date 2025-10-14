@@ -2,7 +2,7 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.3.3
+// @version      0.3.4
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
@@ -16,6 +16,7 @@
 // @grant        GM_setValue
 // @connect      textdb.online
 // @require      https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js
+// @require      https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js
 // ==/UserScript==
 
 // 感谢 'MWITool' 为本脚本提供的技术参考，本脚本部分代码来源于 MWITool，请勿删除本版权声明
@@ -40,6 +41,27 @@
     let playerId;
     let firstImport = true;
     let clientData = {};
+
+    // #region Utils
+
+    /**
+     * 解压缩数据
+     * @param {string} compressed - 偏移后的压缩数据
+     * @returns {string} 解压后的原始数据
+     */
+    function decompressData(compressed) {
+        if (!compressed || compressed === "") return "";
+
+        try {
+            // 使用标准库解压
+            return LZString.decompressFromUTF16(compressed);
+        } catch (e) {
+            error("解压失败:", e);
+            return "";
+        }
+    }
+
+    // #endregion
 
     // #region TextDB
 
@@ -118,7 +140,8 @@
 
     // 获取客户端初始化数据
     function getInitClientData() {
-        return JSON.parse(GM_getValue("init_client_data", ""));
+        const compressed = GM_getValue("init_client_data", "");
+        return JSON.parse(decompressData(compressed));
     }
 
     // 获取当前角色数据
@@ -206,7 +229,6 @@
             }
             case 'init_client_data': {
                 // 客户端数据
-                GM_setValue("init_client_data", message);
                 clientData.actionDetailMap = obj.actionDetailMap;
                 clientData.levelExperienceTable = obj.levelExperienceTable;
                 clientData.itemDetailMap = obj.itemDetailMap;
@@ -775,6 +797,7 @@
             return;
         }
         selectBox.options.length = 0;
+        selectBox.disabled = true;
 
         let defaultOption = document.createElement("option");
         defaultOption.textContent = isZH ? "选择游戏内配装" : "Select Game Loadout";
@@ -816,9 +839,10 @@
 
                 let selectBoxBtn = document.createElement("button");
                 loadoutDiv.appendChild(selectBoxBtn);
-                selectBoxBtn.textContent = isZH ? "使用配装" : "Use Loadout";
+                selectBoxBtn.textContent = isZH ? "使用配装(施工中)" : "Use Loadout";
                 selectBoxBtn.className = "btn btn-warning";
                 selectBoxBtn.style = `width: 120px`;
+                selectBoxBtn.disabled = true;
                 selectBoxBtn.onclick = function () {
                 };
                 // characterLoadoutMap
@@ -1084,8 +1108,9 @@
     // ==================================================
 
     if (localStorage.getItem("initClientData")) {
-        const obj = JSON.parse(localStorage.getItem("initClientData"));
-        GM_setValue("init_client_data", localStorage.getItem("initClientData"));
+        const compressed = localStorage.getItem("initClientData");
+        const obj = JSON.parse(decompressData(compressed));
+        GM_setValue("init_client_data", compressed);
 
         clientData.actionDetailMap = obj.actionDetailMap;
         clientData.levelExperienceTable = obj.levelExperienceTable;
