@@ -2,13 +2,14 @@
 // @name         [MWI] Realtime Import Of Battle Simulation
 // @name:zh-CN   [银河奶牛]战斗模拟实时导入
 // @namespace    http://tampermonkey.net/
-// @version      0.3.4
+// @version      0.3.5
 // @description  Battle simulation imports the realtime configuration of the current character.
 // @description:zh-CN  战斗模拟辅助工具，实时监听角色配置变化，导入当前角色实时配置
 // @icon         https://www.milkywayidle.com/favicon.svg
 // @author       Yannis
 // @license      CC-BY-NC-SA-4.0
 // @match        https://www.milkywayidle.com/*
+// @match        https://www.milkywayidlecn.com/*
 // @match        https://test.milkywayidle.com/*
 // @match        https://*/MWICombatSimulatorTest/*
 // @grant        GM_xmlhttpRequest
